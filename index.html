@@ -1,0 +1,1705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RL Map Designer</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #111; color: #ccc; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── Toolbar ── */
+#toolbar {
+  display: flex; align-items: center; gap: 6px;
+  background: #1a1a2e; border-bottom: 1px solid #333;
+  padding: 6px 10px; flex-shrink: 0;
+}
+#toolbar h1 { font-size: 14px; font-weight: 700; color: #88aaff; margin-right: 10px; white-space: nowrap; }
+.tb-btn {
+  background: #2a2a3e; border: 1px solid #444; color: #ccc;
+  padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;
+  transition: background 0.15s;
+}
+.tb-btn:hover { background: #3a3a5e; }
+.tb-btn.active { background: #4455aa; border-color: #6677cc; color: #fff; }
+.tb-sep { width: 1px; height: 20px; background: #444; margin: 0 4px; }
+#toolbar label { display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px; color: #aaa; }
+#toolbar input[type=checkbox] { cursor: pointer; }
+
+/* ── Main area ── */
+#main { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Left Sidebar ── */
+#sidebar-left {
+  width: 200px; min-width: 200px; background: #161622;
+  border-right: 1px solid #333; display: flex; flex-direction: column;
+  overflow-y: auto; flex-shrink: 0;
+}
+.sb-section { padding: 8px; border-bottom: 1px solid #252535; }
+.sb-title { font-size: 11px; font-weight: 700; color: #8888aa; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.palette-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 7px; border-radius: 4px; cursor: pointer;
+  border: 1px solid transparent; margin-bottom: 2px;
+  transition: background 0.12s;
+}
+.palette-item:hover { background: #22223a; }
+.palette-item.active { background: #2a3060; border-color: #5566bb; }
+.palette-item .pi-icon { font-size: 16px; width: 20px; text-align: center; }
+.palette-item .pi-label { font-size: 12px; }
+
+.preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+.preset-btn {
+  background: #1e1e2e; border: 1px solid #333; color: #bbb;
+  padding: 4px 6px; border-radius: 3px; cursor: pointer; font-size: 11px;
+  text-align: center; transition: background 0.12s;
+}
+.preset-btn:hover { background: #2a2a3e; color: #eee; }
+.preset-btn.full { grid-column: 1 / -1; }
+
+/* ── Center / Viewport ── */
+#center { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#viewport { flex: 1; display: block; cursor: crosshair; }
+
+/* ── Bottom bar ── */
+#bottom-bar {
+  display: flex; align-items: center; gap: 8px;
+  background: #1a1a2e; border-top: 1px solid #333; padding: 6px 10px; flex-shrink: 0;
+}
+.action-btn {
+  background: #22223a; border: 1px solid #444; color: #ccc;
+  padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;
+  transition: background 0.15s;
+}
+.action-btn:hover { background: #2e2e50; }
+.action-btn.primary { background: #224488; border-color: #4477cc; color: #fff; font-weight: 600; }
+.action-btn.primary:hover { background: #2a55aa; }
+.action-btn.publish { background: #224422; border-color: #447744; color: #aaffaa; }
+.action-btn.publish:hover { background: #2a5530; }
+#status-text { margin-left: auto; font-size: 11px; color: #777; }
+
+/* ── Right Sidebar ── */
+#sidebar-right {
+  width: 220px; min-width: 220px; background: #161622;
+  border-left: 1px solid #333; display: flex; flex-direction: column;
+  overflow-y: auto; flex-shrink: 0;
+}
+#props { padding: 8px; }
+.props-title { font-size: 12px; font-weight: 700; color: #8888aa; text-transform: uppercase; margin-bottom: 8px; }
+.prop-row { display: flex; align-items: center; margin-bottom: 5px; gap: 4px; }
+.prop-row label { width: 60px; font-size: 11px; color: #888; flex-shrink: 0; }
+.prop-row input, .prop-row select {
+  flex: 1; background: #1e1e2e; border: 1px solid #333; color: #ccc;
+  padding: 3px 5px; border-radius: 3px; font-size: 12px;
+}
+.prop-row input:focus, .prop-row select:focus { border-color: #5566bb; outline: none; }
+.prop-group { margin-bottom: 10px; }
+.prop-group-title { font-size: 11px; color: #667; margin-bottom: 4px; font-weight: 600; }
+.xyz-row { display: flex; gap: 3px; align-items: center; }
+.xyz-row label { width: 16px; font-size: 11px; color: #888; text-align: right; flex-shrink: 0; }
+.xyz-row input { flex: 1; background: #1e1e2e; border: 1px solid #333; color: #ccc; padding: 3px 4px; border-radius: 3px; font-size: 12px; min-width: 0; }
+.props-divider { height: 1px; background: #252535; margin: 8px 0; }
+
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+  background: #333355; color: #fff; padding: 8px 18px; border-radius: 6px;
+  font-size: 13px; pointer-events: none; opacity: 0; transition: opacity 0.3s;
+  z-index: 1000; max-width: 500px; text-align: center;
+  border: 1px solid #5566aa;
+}
+#toast.warn { background: #554422; border-color: #aa7722; }
+#toast.show { opacity: 1; }
+
+/* ── Modal ── */
+#modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  z-index: 500; align-items: center; justify-content: center;
+}
+#modal-overlay.show { display: flex; }
+#modal-box {
+  background: #1e1e2e; border: 1px solid #444; border-radius: 8px;
+  padding: 20px; width: 380px; max-width: 95vw;
+}
+#modal-box h2 { font-size: 15px; color: #88aaff; margin-bottom: 14px; }
+#modal-box label { display: block; font-size: 12px; color: #888; margin-bottom: 3px; }
+#modal-box input, #modal-box textarea {
+  width: 100%; background: #111; border: 1px solid #333; color: #ccc;
+  padding: 6px 8px; border-radius: 4px; font-size: 13px; margin-bottom: 10px;
+}
+#modal-box textarea { height: 70px; resize: vertical; }
+.modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+.modal-btns button { padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 13px; border: 1px solid #444; }
+#modal-cancel { background: #222; color: #aaa; }
+#modal-confirm { background: #224488; color: #fff; border-color: #4477cc; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #111; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div id="toolbar">
+  <h1>&#x1F680; RL Map Designer</h1>
+  <button class="tb-btn active" id="btn-translate" title="Translate (W)">&#x2195; Move</button>
+  <button class="tb-btn" id="btn-rotate" title="Rotate (E)">&#x21BA; Rotate</button>
+  <button class="tb-btn" id="btn-scale" title="Scale (R)">&#x25A1; Scale</button>
+  <div class="tb-sep"></div>
+  <label><input type="checkbox" id="chk-grid" checked> Grid</label>
+  <label><input type="checkbox" id="chk-snap" checked> Snap</label>
+  <button class="tb-btn" id="btn-top" title="Top view">&#x25A4; Top</button>
+  <button class="tb-btn" id="btn-reset-cam" title="Reset camera">&#x1F504; Camera</button>
+  <button class="tb-btn" id="btn-auto-layout" title="Place standard RL layout">&#x2605; Auto-Layout</button>
+</div>
+
+<!-- Main -->
+<div id="main">
+
+  <!-- Left Sidebar -->
+  <div id="sidebar-left">
+    <div class="sb-section">
+      <div class="sb-title">Object Palette</div>
+      <div class="palette-item" data-type="boost_large">
+        <span class="pi-icon">&#x1F7E1;</span><span class="pi-label">Large Boost Pad</span>
+      </div>
+      <div class="palette-item" data-type="boost_small">
+        <span class="pi-icon">&#x26AA;</span><span class="pi-label">Small Boost Pad</span>
+      </div>
+      <div class="palette-item" data-type="goal_blue">
+        <span class="pi-icon">&#x1F4A5;</span><span class="pi-label">Goal (Blue)</span>
+      </div>
+      <div class="palette-item" data-type="goal_orange">
+        <span class="pi-icon">&#x1F525;</span><span class="pi-label">Goal (Orange)</span>
+      </div>
+      <div class="palette-item" data-type="spawn_blue">
+        <span class="pi-icon">&#x1F535;</span><span class="pi-label">Spawn Blue</span>
+      </div>
+      <div class="palette-item" data-type="spawn_orange">
+        <span class="pi-icon">&#x1F7E0;</span><span class="pi-label">Spawn Orange</span>
+      </div>
+      <div class="palette-item" data-type="ball_spawn">
+        <span class="pi-icon">&#x26AB;</span><span class="pi-label">Ball Spawn</span>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-title">Arena Presets</div>
+      <div class="preset-grid">
+        <button class="preset-btn full" data-preset="standard">Standard RL</button>
+        <button class="preset-btn" data-preset="narrow">Narrow</button>
+        <button class="preset-btn" data-preset="low_ceiling">Low Ceil.</button>
+        <button class="preset-btn" data-preset="octagon">Octagon</button>
+        <button class="preset-btn" data-preset="1d">1D</button>
+        <button class="preset-btn" data-preset="open_field">Open Field</button>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-title">Goal Presets</div>
+      <div class="preset-grid">
+        <button class="preset-btn full" data-goal="standard">Standard</button>
+        <button class="preset-btn" data-goal="impossible">Impossible</button>
+        <button class="preset-btn" data-goal="triple">Triple</button>
+        <button class="preset-btn" data-goal="double">Double</button>
+        <button class="preset-btn" data-goal="wall_goals">Wall Goals</button>
+        <button class="preset-btn" data-goal="giant">Giant</button>
+        <button class="preset-btn full" data-goal="ceiling">Ceiling Goals</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Center viewport -->
+  <div id="center">
+    <canvas id="viewport"></canvas>
+  </div>
+
+  <!-- Right Sidebar -->
+  <div id="sidebar-right">
+    <div id="props">
+      <!-- filled by updatePropsPanel() -->
+      <div id="arena-settings-panel">
+        <div class="props-title">Arena Settings</div>
+        <div class="prop-group">
+          <div class="prop-row"><label>Width</label><input type="number" id="ap-fw" value="96" step="1"></div>
+          <div class="prop-row"><label>Length</label><input type="number" id="ap-fl" value="120" step="1"></div>
+          <div class="prop-row"><label>Height</label><input type="number" id="ap-wh" value="24" step="1"></div>
+          <div class="prop-row"><label>CornerR</label><input type="number" id="ap-cr" value="8" step="0.5"></div>
+        </div>
+        <div class="prop-row"><label style="width:80px">Walls</label><input type="checkbox" id="ap-walls" checked></div>
+        <div class="prop-row"><label style="width:80px">Ceiling</label><input type="checkbox" id="ap-ceiling" checked></div>
+        <button class="action-btn" style="width:100%;margin-top:6px" id="btn-apply-arena">Apply</button>
+      </div>
+      <div id="object-props-panel" style="display:none">
+        <!-- filled dynamically -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom bar -->
+<div id="bottom-bar">
+  <button class="action-btn" id="btn-save">&#x1F4BE; Save</button>
+  <button class="action-btn" id="btn-load">&#x1F4C2; Load</button>
+  <input type="file" id="file-input" accept=".json" style="display:none">
+  <button class="action-btn" id="btn-export-json">Export JSON</button>
+  <button class="action-btn" id="btn-export-t3d">Export T3D</button>
+  <button class="action-btn primary" id="btn-export-rl">&#x25BA; Export to RL</button>
+  <button class="action-btn publish" id="btn-publish">&#x2601; Workshop</button>
+  <span id="status-text">Ready — Ctrl+Z/Y to undo/redo</span>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Modal (Workshop publish) -->
+<div id="modal-overlay">
+  <div id="modal-box">
+    <h2>&#x2601; Publish to Steam Workshop</h2>
+    <label>Map Title</label>
+    <input type="text" id="modal-title" placeholder="My Custom Map">
+    <label>Description</label>
+    <textarea id="modal-desc" placeholder="Describe your map..."></textarea>
+    <label>Preview Image Path (optional)</label>
+    <input type="text" id="modal-preview" placeholder="C:\path\to\preview.jpg">
+    <div class="modal-btns">
+      <button id="modal-cancel">Cancel</button>
+      <button id="modal-confirm">Publish</button>
+    </div>
+  </div>
+</div>
+
+<!-- Three.js via CDN -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/TransformControls.js"></script>
+<script>
+'use strict';
+// ────────────────────────────────────────────────────────────────────────────
+//  Constants
+// ────────────────────────────────────────────────────────────────────────────
+var SCALE_UU = 85.3;   // Three.js units → Unreal Units
+var SNAP_SIZE = 1.0;   // grid snap distance (Three.js units)
+var VERSION = 1;
+
+// Standard boost pad coordinates (Unreal Units ÷ SCALE_UU)
+var STD_LARGE_PADS = [
+  [-3072/SCALE_UU, 0, -4096/SCALE_UU],
+  [ 3072/SCALE_UU, 0, -4096/SCALE_UU],
+  [-3584/SCALE_UU, 0,  0            ],
+  [ 3584/SCALE_UU, 0,  0            ],
+  [-3072/SCALE_UU, 0,  4096/SCALE_UU],
+  [ 3072/SCALE_UU, 0,  4096/SCALE_UU]
+];
+var STD_SMALL_PADS = [
+  [-1792/SCALE_UU, 0, -4184/SCALE_UU], [ 1792/SCALE_UU, 0, -4184/SCALE_UU],
+  [-940/SCALE_UU,  0, -3308/SCALE_UU], [ 940/SCALE_UU,  0, -3308/SCALE_UU],
+  [0,              0, -2816/SCALE_UU],
+  [-3584/SCALE_UU, 0, -2484/SCALE_UU], [ 3584/SCALE_UU, 0, -2484/SCALE_UU],
+  [-1788/SCALE_UU, 0, -2300/SCALE_UU], [ 1788/SCALE_UU, 0, -2300/SCALE_UU],
+  [-2048/SCALE_UU, 0, -1036/SCALE_UU], [ 2048/SCALE_UU, 0, -1036/SCALE_UU],
+  [-3584/SCALE_UU, 0,  0            ], [ 3584/SCALE_UU, 0,  0            ],
+  // mirror z
+  [-2048/SCALE_UU, 0,  1036/SCALE_UU], [ 2048/SCALE_UU, 0,  1036/SCALE_UU],
+  [-1788/SCALE_UU, 0,  2300/SCALE_UU], [ 1788/SCALE_UU, 0,  2300/SCALE_UU],
+  [-3584/SCALE_UU, 0,  2484/SCALE_UU], [ 3584/SCALE_UU, 0,  2484/SCALE_UU],
+  [0,              0,  2816/SCALE_UU],
+  [-940/SCALE_UU,  0,  3308/SCALE_UU], [ 940/SCALE_UU,  0,  3308/SCALE_UU],
+  [-1792/SCALE_UU, 0,  4184/SCALE_UU], [ 1792/SCALE_UU, 0,  4184/SCALE_UU],
+  // center-line extras
+  [-1024/SCALE_UU, 0,  0],             [ 1024/SCALE_UU, 0,  0],
+  [0,              0, -1024/SCALE_UU], [0,              0,  1024/SCALE_UU]
+];
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Arena data model
+// ────────────────────────────────────────────────────────────────────────────
+var arenaConfig = {
+  version: VERSION,
+  arena: { preset: 'standard', fw: 96, fl: 120, wh: 24, cornerR: 8, walls: true, ceiling: true },
+  objects: [],
+  meta: { title: '', description: '', previewPath: '' }
+};
+
+var ARENA_PRESETS = {
+  standard:   { fw: 96,  fl: 120, wh: 24, cornerR: 8,  walls: true,  ceiling: true  },
+  narrow:     { fw: 48,  fl: 120, wh: 24, cornerR: 4,  walls: true,  ceiling: true  },
+  low_ceiling:{ fw: 96,  fl: 120, wh: 12, cornerR: 8,  walls: true,  ceiling: true  },
+  octagon:    { fw: 96,  fl: 96,  wh: 24, cornerR: 30, walls: true,  ceiling: true  },
+  '1d':       { fw: 20,  fl: 200, wh: 10, cornerR: 2,  walls: true,  ceiling: true  },
+  open_field: { fw: 96,  fl: 120, wh: 24, cornerR: 8,  walls: false, ceiling: false }
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Three.js state
+// ────────────────────────────────────────────────────────────────────────────
+var renderer, scene, camera;
+var orbitControls, transformControls;
+var _arenaGroup, _objectGroup;
+var _gridHelper;
+var _floorPlane;           // invisible plane for raycasting placement
+var _objects = [];         // { mesh, data } pairs — data mirrors arenaConfig.objects entry
+var _selected = null;
+var _boxHelper = null;
+var _ghostMesh = null;
+var _placementType = null;
+var _snapEnabled = true;
+var _gizmoMode = 'translate';
+var _objectIdCounter = 1;
+var _toastTimer = null;
+var _transformStartPos = null;
+var _transformStartRot = null;
+var _transformStartScale = null;
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Undo/Redo
+// ────────────────────────────────────────────────────────────────────────────
+var history = {
+  undoStack: [],
+  redoStack: [],
+  execute: function(cmd) {
+    cmd.execute();
+    this.undoStack.push(cmd);
+    this.redoStack.length = 0;
+    autoSave();
+    updateStatus();
+  },
+  undo: function() {
+    if (!this.undoStack.length) return;
+    var c = this.undoStack.pop();
+    c.undo();
+    this.redoStack.push(c);
+    autoSave();
+    updateStatus();
+  },
+  redo: function() {
+    if (!this.redoStack.length) return;
+    var c = this.redoStack.pop();
+    c.execute();
+    this.undoStack.push(c);
+    autoSave();
+    updateStatus();
+  }
+};
+
+function AddObjectCmd(type, pos, props) {
+  this.type = type;
+  this.pos = pos.slice();
+  this.props = props || {};
+  this.id = _objectIdCounter++;
+  this._mesh = null;
+  this.execute = function() {
+    var data = makeObjectData(this.type, this.pos, this.id, this.props);
+    arenaConfig.objects.push(data);
+    this._mesh = addObjectMesh(data);
+  };
+  this.undo = function() {
+    removeObjectById(this.id);
+  };
+}
+
+function RemoveObjectCmd(mesh) {
+  this.mesh = mesh;
+  this.data = mesh.userData.objectData;
+  this.execute = function() {
+    removeObjectById(this.data.id);
+  };
+  this.undo = function() {
+    arenaConfig.objects.push(this.data);
+    addObjectMesh(this.data);
+  };
+}
+
+function MoveObjectCmd(mesh, beforePos, beforeRot, beforeScale, afterPos, afterRot, afterScale) {
+  this.mesh = mesh;
+  this.beforePos = beforePos; this.beforeRot = beforeRot; this.beforeScale = beforeScale;
+  this.afterPos = afterPos;   this.afterRot = afterRot;   this.afterScale = afterScale;
+  this.execute = function() {
+    this.mesh.position.fromArray(this.afterPos);
+    this.mesh.rotation.set(this.afterRot[0], this.afterRot[1], this.afterRot[2]);
+    this.mesh.scale.fromArray(this.afterScale);
+    syncMeshToData(this.mesh);
+    updatePropsPanel(this.mesh);
+  };
+  this.undo = function() {
+    this.mesh.position.fromArray(this.beforePos);
+    this.mesh.rotation.set(this.beforeRot[0], this.beforeRot[1], this.beforeRot[2]);
+    this.mesh.scale.fromArray(this.beforeScale);
+    syncMeshToData(this.mesh);
+    updatePropsPanel(this.mesh);
+  };
+}
+
+function SetPropertyCmd(mesh, key, oldVal, newVal) {
+  this.mesh = mesh;
+  this.key = key; this.oldVal = oldVal; this.newVal = newVal;
+  this.execute = function() {
+    this.mesh.userData.objectData.properties[this.key] = this.newVal;
+    applyPropertyToMesh(this.mesh, this.key, this.newVal);
+  };
+  this.undo = function() {
+    this.mesh.userData.objectData.properties[this.key] = this.oldVal;
+    applyPropertyToMesh(this.mesh, this.key, this.oldVal);
+    updatePropsPanel(this.mesh);
+  };
+}
+
+function CompoundCmd(cmds) {
+  this.cmds = cmds;
+  this.execute = function() { for (var i = 0; i < this.cmds.length; i++) this.cmds[i].execute(); };
+  this.undo   = function() { for (var i = this.cmds.length - 1; i >= 0; i--) this.cmds[i].undo(); };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Init
+// ────────────────────────────────────────────────────────────────────────────
+function init() {
+  var canvas = document.getElementById('viewport');
+  renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0d0d1a);
+  scene.fog = new THREE.Fog(0x0d0d1a, 200, 500);
+
+  camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+  camera.position.set(0, 80, 80);
+  camera.lookAt(0, 0, 0);
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0x404060, 0.8));
+  var sun = new THREE.DirectionalLight(0xffffff, 1.5);
+  sun.position.set(50, 100, 50);
+  sun.castShadow = true;
+  scene.add(sun);
+  scene.add(new THREE.HemisphereLight(0x223344, 0x111122, 0.5));
+
+  // Grid
+  _gridHelper = new THREE.GridHelper(240, 48, 0x444466, 0x2a2a40);
+  scene.add(_gridHelper);
+
+  // Invisible floor plane for placement raycasting
+  _floorPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(1000, 1000),
+    new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide })
+  );
+  _floorPlane.rotation.x = -Math.PI / 2;
+  scene.add(_floorPlane);
+
+  // Arena and object groups
+  _arenaGroup = new THREE.Group();
+  _objectGroup = new THREE.Group();
+  scene.add(_arenaGroup);
+  scene.add(_objectGroup);
+
+  // OrbitControls
+  orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
+  orbitControls.enableDamping = true;
+  orbitControls.dampingFactor = 0.08;
+  orbitControls.minDistance = 5;
+  orbitControls.maxDistance = 300;
+
+  // TransformControls
+  transformControls = new THREE.TransformControls(camera, renderer.domElement);
+  transformControls.setMode('translate');
+  transformControls.addEventListener('dragging-changed', function(e) {
+    orbitControls.enabled = !e.value;
+    if (e.value) {
+      // drag start — capture state
+      if (_selected) {
+        _transformStartPos   = _selected.position.toArray();
+        _transformStartRot   = [_selected.rotation.x, _selected.rotation.y, _selected.rotation.z];
+        _transformStartScale = _selected.scale.toArray();
+      }
+    } else {
+      // drag end — commit undo command
+      if (_selected && _transformStartPos) {
+        var ap = _selected.position.toArray();
+        var ar = [_selected.rotation.x, _selected.rotation.y, _selected.rotation.z];
+        var as_ = _selected.scale.toArray();
+        var posChanged = JSON.stringify(ap) !== JSON.stringify(_transformStartPos);
+        var rotChanged = JSON.stringify(ar) !== JSON.stringify(_transformStartRot);
+        var scaChanged = JSON.stringify(as_) !== JSON.stringify(_transformStartScale);
+        if (posChanged || rotChanged || scaChanged) {
+          var cmd = new MoveObjectCmd(_selected,
+            _transformStartPos, _transformStartRot, _transformStartScale,
+            ap, ar, as_);
+          history.undoStack.push(cmd);
+          history.redoStack.length = 0;
+          syncMeshToData(_selected);
+          autoSave();
+          updateStatus();
+        }
+        _transformStartPos = null;
+      }
+    }
+  });
+  transformControls.addEventListener('change', function() {
+    if (_selected) {
+      syncMeshToData(_selected);
+      updatePropsPanel(_selected);
+    }
+    if (_boxHelper && _selected) _boxHelper.update();
+  });
+  scene.add(transformControls);
+
+  // Resize handler
+  function onResize() {
+    var center = document.getElementById('center');
+    var w = center.clientWidth, h = center.clientHeight;
+    renderer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', onResize);
+  onResize();
+
+  // Events
+  renderer.domElement.addEventListener('mousemove', onMouseMove);
+  renderer.domElement.addEventListener('click', onViewportClick);
+  renderer.domElement.addEventListener('contextmenu', onRightClick);
+
+  // Keyboard
+  document.addEventListener('keydown', onKeyDown);
+
+  // Toolbar buttons
+  document.getElementById('btn-translate').addEventListener('click', function() { setGizmoMode('translate'); });
+  document.getElementById('btn-rotate').addEventListener('click', function() { setGizmoMode('rotate'); });
+  document.getElementById('btn-scale').addEventListener('click', function() { setGizmoMode('scale'); });
+  document.getElementById('chk-grid').addEventListener('change', function(e) { _gridHelper.visible = e.target.checked; });
+  document.getElementById('chk-snap').addEventListener('change', function(e) { _snapEnabled = e.target.checked; });
+  document.getElementById('btn-top').addEventListener('click', setCameraTop);
+  document.getElementById('btn-reset-cam').addEventListener('click', resetCamera);
+  document.getElementById('btn-auto-layout').addEventListener('click', autoLayout);
+
+  // Arena settings
+  document.getElementById('btn-apply-arena').addEventListener('click', applyArenaFromPanel);
+  ['ap-fw','ap-fl','ap-wh','ap-cr'].forEach(function(id) {
+    document.getElementById(id).addEventListener('change', applyArenaFromPanel);
+  });
+  ['ap-walls','ap-ceiling'].forEach(function(id) {
+    document.getElementById(id).addEventListener('change', applyArenaFromPanel);
+  });
+
+  // Arena presets
+  document.querySelectorAll('[data-preset]').forEach(function(btn) {
+    btn.addEventListener('click', function() { applyArenaPreset(this.dataset.preset); });
+  });
+
+  // Goal presets
+  document.querySelectorAll('[data-goal]').forEach(function(btn) {
+    btn.addEventListener('click', function() { applyGoalPreset(this.dataset.goal); });
+  });
+
+  // Palette
+  document.querySelectorAll('.palette-item').forEach(function(el) {
+    el.addEventListener('click', function() {
+      var type = this.dataset.type;
+      if (_placementType === type) {
+        cancelPlacement();
+      } else {
+        startPlacement(type);
+      }
+    });
+  });
+
+  // Bottom bar buttons
+  document.getElementById('btn-save').addEventListener('click', saveMap);
+  document.getElementById('btn-load').addEventListener('click', function() { document.getElementById('file-input').click(); });
+  document.getElementById('file-input').addEventListener('change', function(e) {
+    if (!e.target.files[0]) return;
+    var fr = new FileReader();
+    fr.onload = function(ev) { loadMap(ev.target.result); };
+    fr.readAsText(e.target.files[0]);
+    e.target.value = '';
+  });
+  document.getElementById('btn-export-json').addEventListener('click', exportJSON);
+  document.getElementById('btn-export-t3d').addEventListener('click', exportT3D);
+  document.getElementById('btn-export-rl').addEventListener('click', exportToRL);
+  document.getElementById('btn-publish').addEventListener('click', openPublishModal);
+
+  // Modal
+  document.getElementById('modal-cancel').addEventListener('click', function() {
+    document.getElementById('modal-overlay').classList.remove('show');
+  });
+  document.getElementById('modal-confirm').addEventListener('click', confirmPublish);
+
+  // Build initial arena
+  buildArena();
+  applyGoalPreset('standard');
+
+  // Auto-restore
+  var saved = localStorage.getItem('rl_map_designer_autosave');
+  if (saved) {
+    try {
+      var parsed = JSON.parse(saved);
+      if (parsed && parsed.version === VERSION) {
+        // Offer restore
+        showToast('Auto-save found — press Ctrl+L to restore last session', '');
+        window._pendingRestore = saved;
+      }
+    } catch(e) {}
+  }
+
+  // Start render loop
+  animate();
+
+  showToast('RL Map Designer ready — click palette to place objects', '');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Render loop
+// ────────────────────────────────────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+  orbitControls.update();
+  if (_boxHelper && _selected) _boxHelper.update();
+  renderer.render(scene, camera);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Arena geometry
+// ────────────────────────────────────────────────────────────────────────────
+function buildArena() {
+  // Clear old arena meshes
+  while (_arenaGroup.children.length) _arenaGroup.remove(_arenaGroup.children[0]);
+
+  var a = arenaConfig.arena;
+  var fw = a.fw, fl = a.fl, wh = a.wh, cr = a.cornerR;
+
+  var floorMat = new THREE.MeshStandardMaterial({ color: 0x1a5c1a, roughness: 0.9, metalness: 0.0 });
+  var wallMat  = new THREE.MeshStandardMaterial({ color: 0x3a3a55, roughness: 0.8, metalness: 0.1, side: THREE.BackSide });
+  var ceilMat  = new THREE.MeshStandardMaterial({ color: 0x2a2a44, roughness: 0.8, metalness: 0.1, side: THREE.BackSide, transparent: true, opacity: 0.35 });
+  var cornerMat= new THREE.MeshStandardMaterial({ color: 0x444466, roughness: 0.8, metalness: 0.1, side: THREE.BackSide });
+
+  // Floor
+  var floor = new THREE.Mesh(new THREE.PlaneGeometry(fw, fl), floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  _arenaGroup.add(floor);
+
+  // Floor grid lines (subtle)
+  var floorGrid = new THREE.GridHelper(Math.max(fw, fl) * 1.0, Math.max(fw, fl) / 4, 0x224422, 0x183318);
+  floorGrid.position.y = 0.02;
+  _arenaGroup.add(floorGrid);
+
+  if (a.walls) {
+    // Side walls (X± walls, along Z axis)
+    addWall(fw/2, wh/2, 0, fl, wh, 0, wallMat);    // +X wall
+    addWall(-fw/2, wh/2, 0, fl, wh, 0, wallMat);   // -X wall
+    // End walls (Z± walls, along X axis)
+    addWall(0, wh/2, fl/2, fw, wh, Math.PI/2, wallMat);  // +Z
+    addWall(0, wh/2, -fl/2, fw, wh, Math.PI/2, wallMat); // -Z
+
+    // Corner bevels (4 corners at 45°)
+    var bw = cr * Math.SQRT2;
+    addCorner( fw/2,  fl/2, wh/2, bw, wh,  Math.PI/4, cornerMat);
+    addCorner(-fw/2,  fl/2, wh/2, bw, wh, -Math.PI/4, cornerMat);
+    addCorner( fw/2, -fl/2, wh/2, bw, wh, -Math.PI/4, cornerMat);
+    addCorner(-fw/2, -fl/2, wh/2, bw, wh,  Math.PI/4, cornerMat);
+  }
+
+  if (a.ceiling) {
+    var ceil = new THREE.Mesh(new THREE.PlaneGeometry(fw, fl), ceilMat);
+    ceil.rotation.x = Math.PI / 2;
+    ceil.position.y = wh;
+    _arenaGroup.add(ceil);
+  }
+
+  // Wall frame lines for visibility
+  if (a.walls) {
+    addArenaEdges(fw, fl, wh, cr);
+  }
+
+  // Update invisible floor plane for raycasting
+  _floorPlane.geometry.dispose();
+  _floorPlane.geometry = new THREE.PlaneGeometry(fw * 4, fl * 4);
+
+  // Sync arena settings panel
+  document.getElementById('ap-fw').value = fw;
+  document.getElementById('ap-fl').value = fl;
+  document.getElementById('ap-wh').value = wh;
+  document.getElementById('ap-cr').value = cr;
+  document.getElementById('ap-walls').checked = a.walls;
+  document.getElementById('ap-ceiling').checked = a.ceiling;
+}
+
+function addWall(x, y, z, w, h, rotY, mat) {
+  var mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+  mesh.position.set(x, y, z);
+  mesh.rotation.y = rotY;
+  _arenaGroup.add(mesh);
+}
+
+function addCorner(x, z, y, w, h, rotY, mat) {
+  var mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+  mesh.position.set(x - Math.sign(x) * Math.abs(Math.cos(rotY + Math.PI/4)) * w * 0.5,
+                    y,
+                    z - Math.sign(z) * Math.abs(Math.sin(rotY + Math.PI/4)) * w * 0.5);
+  mesh.rotation.y = rotY + Math.PI / 2;
+  _arenaGroup.add(mesh);
+}
+
+function addArenaEdges(fw, fl, wh, cr) {
+  var lineMat = new THREE.LineBasicMaterial({ color: 0x5566aa, transparent: true, opacity: 0.4 });
+  // Floor outline box
+  var pts = [
+    new THREE.Vector3(-fw/2, 0.05,  fl/2),
+    new THREE.Vector3( fw/2, 0.05,  fl/2),
+    new THREE.Vector3( fw/2, 0.05, -fl/2),
+    new THREE.Vector3(-fw/2, 0.05, -fl/2),
+    new THREE.Vector3(-fw/2, 0.05,  fl/2)
+  ];
+  var geo = new THREE.BufferGeometry().setFromPoints(pts);
+  _arenaGroup.add(new THREE.Line(geo, lineMat));
+  // Ceiling outline
+  var cpts = pts.map(function(p) { return new THREE.Vector3(p.x, wh, p.z); });
+  _arenaGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(cpts), lineMat));
+  // Vertical edges
+  [[-fw/2, fl/2],[fw/2, fl/2],[fw/2,-fl/2],[-fw/2,-fl/2]].forEach(function(xz) {
+    var ep = [new THREE.Vector3(xz[0], 0, xz[1]), new THREE.Vector3(xz[0], wh, xz[1])];
+    _arenaGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ep), lineMat));
+  });
+}
+
+function applyArenaFromPanel() {
+  var fw = parseFloat(document.getElementById('ap-fw').value) || 96;
+  var fl = parseFloat(document.getElementById('ap-fl').value) || 120;
+  var wh = parseFloat(document.getElementById('ap-wh').value) || 24;
+  var cr = parseFloat(document.getElementById('ap-cr').value) || 8;
+  arenaConfig.arena.fw = fw;
+  arenaConfig.arena.fl = fl;
+  arenaConfig.arena.wh = wh;
+  arenaConfig.arena.cornerR = cr;
+  arenaConfig.arena.walls = document.getElementById('ap-walls').checked;
+  arenaConfig.arena.ceiling = document.getElementById('ap-ceiling').checked;
+  arenaConfig.arena.preset = 'custom';
+  buildArena();
+  autoSave();
+}
+
+function applyArenaPreset(name) {
+  var p = ARENA_PRESETS[name];
+  if (!p) return;
+  Object.assign(arenaConfig.arena, p);
+  arenaConfig.arena.preset = name;
+  buildArena();
+  autoSave();
+  showToast('Arena: ' + name.replace(/_/g,' '), '');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Object system
+// ────────────────────────────────────────────────────────────────────────────
+function makeObjectData(type, pos, id, extraProps) {
+  var props = {};
+  if (type === 'boost_large' || type === 'boost_small') {
+    props.size = (type === 'boost_large') ? 'large' : 'small';
+    props.respawnTime = (type === 'boost_large') ? 10 : 3;
+  } else if (type === 'goal_blue' || type === 'goal_orange') {
+    props.team  = (type === 'goal_blue') ? 0 : 1;
+    props.width = 21; props.height = 8; props.depth = 5;
+  } else if (type === 'spawn_blue' || type === 'spawn_orange') {
+    props.team = (type === 'spawn_blue') ? 0 : 1;
+    props.index = 0;
+  } else if (type === 'ball_spawn') {
+    // no special props
+  }
+  Object.assign(props, extraProps || {});
+  // Normalize type for storage
+  var storageType = type;
+  if (type === 'goal_blue') storageType = 'goal';
+  if (type === 'goal_orange') storageType = 'goal';
+  if (type === 'spawn_blue') storageType = 'spawn_blue';
+  if (type === 'spawn_orange') storageType = 'spawn_orange';
+
+  return {
+    id: id,
+    type: storageType,
+    paletteType: type,
+    position: [pos[0], pos[1], pos[2]],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+    properties: props
+  };
+}
+
+function createObjectMesh(type, props) {
+  props = props || {};
+  var mesh, geo, mat, color;
+
+  if (type === 'boost_large') {
+    geo = new THREE.CylinderGeometry(2.5, 2.5, 0.3, 32);
+    mat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0x885500, roughness: 0.3, metalness: 0.6 });
+    mesh = new THREE.Mesh(geo, mat);
+    // Inner glow ring
+    var ringGeo = new THREE.RingGeometry(2.0, 2.5, 32);
+    var ringMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+    var ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.16;
+    mesh.add(ring);
+  } else if (type === 'boost_small') {
+    geo = new THREE.CylinderGeometry(1.7, 1.7, 0.2, 24);
+    mat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x444444, roughness: 0.4, metalness: 0.5 });
+    mesh = new THREE.Mesh(geo, mat);
+  } else if (type === 'goal_blue' || type === 'goal_orange') {
+    color = (type === 'goal_blue') ? 0x4488ff : 0xff6600;
+    var gw = (props.width  !== undefined) ? props.width  : 21;
+    var gh = (props.height !== undefined) ? props.height : 8;
+    var gd = (props.depth  !== undefined) ? props.depth  : 5;
+    var boxGeo = new THREE.BoxGeometry(gw, gh, gd);
+    var edgeGeo = new THREE.EdgesGeometry(boxGeo);
+    var edgeMat = new THREE.LineBasicMaterial({ color: color, linewidth: 2 });
+    mesh = new THREE.LineSegments(edgeGeo, edgeMat);
+    // Translucent fill
+    var fillMat = new THREE.MeshStandardMaterial({ color: color, transparent: true, opacity: 0.1, side: THREE.DoubleSide });
+    var fill = new THREE.Mesh(boxGeo, fillMat);
+    mesh.add(fill);
+    mesh.position.y = gh / 2;
+    boxGeo.dispose();
+  } else if (type === 'spawn_blue' || type === 'spawn_orange') {
+    color = (type === 'spawn_blue') ? 0x4488ff : 0xff6600;
+    geo = new THREE.ConeGeometry(1.2, 2.5, 8);
+    mat = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.3, roughness: 0.5 });
+    mesh = new THREE.Mesh(geo, mat);
+    mesh.position.y = 1.25;
+    // Arrow to show facing direction
+    var arrowGeo = new THREE.ConeGeometry(0.3, 1.5, 6);
+    var arrowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    var arrow = new THREE.Mesh(arrowGeo, arrowMat);
+    arrow.rotation.x = Math.PI / 2;
+    arrow.position.set(0, 0, -1.5);
+    mesh.add(arrow);
+  } else if (type === 'ball_spawn') {
+    geo = new THREE.SphereGeometry(1.5, 16, 12);
+    var wireGeo = new THREE.WireframeGeometry(geo);
+    var wireMat = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+    mesh = new THREE.LineSegments(wireGeo, wireMat);
+    mesh.position.y = 1.5;
+    // Inner sphere
+    var innerMat = new THREE.MeshStandardMaterial({ color: 0x888888, transparent: true, opacity: 0.15 });
+    var inner = new THREE.Mesh(geo, innerMat);
+    mesh.add(inner);
+    geo.dispose();
+  } else {
+    // Fallback
+    mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(1,1,1),
+      new THREE.MeshStandardMaterial({ color: 0xff00ff })
+    );
+  }
+
+  mesh.castShadow = true;
+  return mesh;
+}
+
+function addObjectMesh(data) {
+  var type = data.paletteType || data.type;
+  var mesh = createObjectMesh(type, data.properties);
+  mesh.position.fromArray(data.position);
+  mesh.rotation.set(data.rotation[0], data.rotation[1], data.rotation[2]);
+  mesh.scale.fromArray(data.scale);
+  mesh.userData.objectData = data;
+  mesh.userData.isPlacedObject = true;
+  _objectGroup.add(mesh);
+  _objects.push({ mesh: mesh, data: data });
+  return mesh;
+}
+
+function removeObjectById(id) {
+  for (var i = 0; i < _objects.length; i++) {
+    if (_objects[i].data.id === id) {
+      var m = _objects[i].mesh;
+      _objectGroup.remove(m);
+      disposeMesh(m);
+      _objects.splice(i, 1);
+      break;
+    }
+  }
+  arenaConfig.objects = arenaConfig.objects.filter(function(o) { return o.id !== id; });
+  if (_selected && _selected.userData.objectData && _selected.userData.objectData.id === id) {
+    deselectAll();
+  }
+}
+
+function disposeMesh(m) {
+  if (m.geometry) m.geometry.dispose();
+  if (m.material) {
+    if (Array.isArray(m.material)) m.material.forEach(function(mat) { mat.dispose(); });
+    else m.material.dispose();
+  }
+  m.traverse(function(child) {
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) child.material.dispose();
+  });
+}
+
+function syncMeshToData(mesh) {
+  var d = mesh.userData.objectData;
+  if (!d) return;
+  d.position = mesh.position.toArray();
+  d.rotation = [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z];
+  d.scale = mesh.scale.toArray();
+}
+
+function applyPropertyToMesh(mesh, key, val) {
+  // Rebuild mesh if geometry-affecting property changed (goal dimensions)
+  var d = mesh.userData.objectData;
+  if (d && (d.type === 'goal' || d.paletteType === 'goal_blue' || d.paletteType === 'goal_orange')) {
+    if (key === 'width' || key === 'height' || key === 'depth') {
+      rebuildGoalMesh(mesh);
+    }
+  }
+}
+
+function rebuildGoalMesh(mesh) {
+  var d = mesh.userData.objectData;
+  var type = d.paletteType || d.type;
+  var p = d.properties;
+  var color = (p.team === 0) ? 0x4488ff : 0xff6600;
+  var gw = p.width || 21, gh = p.height || 8, gd = p.depth || 5;
+  var boxGeo = new THREE.BoxGeometry(gw, gh, gd);
+  var edgeGeo = new THREE.EdgesGeometry(boxGeo);
+  // Remove old geometry
+  if (mesh.geometry) { mesh.geometry.dispose(); }
+  mesh.geometry = edgeGeo;
+  if (mesh.material) { mesh.material.color.setHex(color); }
+  // update fill child
+  if (mesh.children[0]) {
+    if (mesh.children[0].geometry) mesh.children[0].geometry.dispose();
+    mesh.children[0].geometry = boxGeo.clone();
+  }
+  boxGeo.dispose();
+  mesh.position.y = gh / 2;
+  syncMeshToData(mesh);
+}
+
+function rebuildObjects() {
+  // Clear all object meshes
+  while (_objectGroup.children.length) {
+    var m = _objectGroup.children[0];
+    _objectGroup.remove(m);
+    disposeMesh(m);
+  }
+  _objects = [];
+  _selected = null;
+  transformControls.detach();
+  if (_boxHelper) { scene.remove(_boxHelper); _boxHelper = null; }
+
+  // Re-add from arenaConfig
+  arenaConfig.objects.forEach(function(data) {
+    addObjectMesh(data);
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Placement mode
+// ────────────────────────────────────────────────────────────────────────────
+function startPlacement(type) {
+  cancelPlacement();
+  _placementType = type;
+  renderer.domElement.style.cursor = 'crosshair';
+
+  // Highlight palette item
+  document.querySelectorAll('.palette-item').forEach(function(el) {
+    el.classList.toggle('active', el.dataset.type === type);
+  });
+
+  _ghostMesh = createObjectMesh(type);
+  _ghostMesh.traverse(function(child) {
+    if (child.material) {
+      if (Array.isArray(child.material)) {
+        child.material.forEach(function(m) { m.transparent = true; m.opacity = (m.opacity || 1) * 0.5; });
+      } else {
+        child.material.transparent = true;
+        child.material.opacity = (child.material.opacity || 1) * 0.5;
+      }
+    }
+  });
+  scene.add(_ghostMesh);
+  showToast('Click to place ' + type.replace(/_/g,' ') + ' — Right-click or Esc to cancel', '');
+}
+
+function cancelPlacement() {
+  if (_ghostMesh) {
+    scene.remove(_ghostMesh);
+    disposeMesh(_ghostMesh);
+    _ghostMesh = null;
+  }
+  _placementType = null;
+  renderer.domElement.style.cursor = '';
+  document.querySelectorAll('.palette-item').forEach(function(el) { el.classList.remove('active'); });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Mouse / raycasting
+// ────────────────────────────────────────────────────────────────────────────
+var _mouse = new THREE.Vector2();
+var _raycaster = new THREE.Raycaster();
+
+function getMouseNDC(e) {
+  var rect = renderer.domElement.getBoundingClientRect();
+  _mouse.set(
+    ((e.clientX - rect.left) / rect.width)  * 2 - 1,
+   -((e.clientY - rect.top)  / rect.height) * 2 + 1
+  );
+}
+
+function snapValue(v) {
+  return _snapEnabled ? Math.round(v / SNAP_SIZE) * SNAP_SIZE : v;
+}
+
+function onMouseMove(e) {
+  if (!_placementType || !_ghostMesh) return;
+  getMouseNDC(e);
+  _raycaster.setFromCamera(_mouse, camera);
+  var hits = _raycaster.intersectObject(_floorPlane);
+  if (hits.length) {
+    var p = hits[0].point;
+    _ghostMesh.position.set(snapValue(p.x), _ghostMesh.position.y, snapValue(p.z));
+  }
+}
+
+function onViewportClick(e) {
+  if (e.button !== 0) return;
+
+  if (_placementType) {
+    // Place object
+    getMouseNDC(e);
+    _raycaster.setFromCamera(_mouse, camera);
+    var hits = _raycaster.intersectObject(_floorPlane);
+    if (hits.length) {
+      var p = hits[0].point;
+      var pos = [snapValue(p.x), 0, snapValue(p.z)];
+      history.execute(new AddObjectCmd(_placementType, pos));
+    }
+    return;
+  }
+
+  // Selection
+  getMouseNDC(e);
+  _raycaster.setFromCamera(_mouse, camera);
+
+  // Collect all selectable objects (recursively check parents)
+  var meshes = [];
+  _objects.forEach(function(obj) { meshes.push(obj.mesh); });
+  var hits = _raycaster.intersectObjects(meshes, true);
+
+  if (hits.length) {
+    // Walk up to find a direct child of _objectGroup
+    var target = hits[0].object;
+    while (target.parent && target.parent !== _objectGroup) target = target.parent;
+    if (target.userData.isPlacedObject) {
+      selectObject(target);
+      return;
+    }
+  }
+
+  deselectAll();
+}
+
+function onRightClick(e) {
+  e.preventDefault();
+  if (_placementType) {
+    cancelPlacement();
+  } else {
+    deselectAll();
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Selection
+// ────────────────────────────────────────────────────────────────────────────
+function selectObject(mesh) {
+  deselectAll();
+  _selected = mesh;
+  transformControls.attach(mesh);
+  _boxHelper = new THREE.BoxHelper(mesh, 0xffff00);
+  scene.add(_boxHelper);
+  updatePropsPanel(mesh);
+  document.getElementById('arena-settings-panel').style.display = 'none';
+  document.getElementById('object-props-panel').style.display = 'block';
+}
+
+function deselectAll() {
+  _selected = null;
+  transformControls.detach();
+  if (_boxHelper) { scene.remove(_boxHelper); _boxHelper = null; }
+  document.getElementById('arena-settings-panel').style.display = 'block';
+  document.getElementById('object-props-panel').style.display = 'none';
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Properties panel
+// ────────────────────────────────────────────────────────────────────────────
+function updatePropsPanel(mesh) {
+  if (!mesh) return;
+  var d = mesh.userData.objectData;
+  if (!d) return;
+  var p = d.properties;
+  var type = d.paletteType || d.type;
+
+  var panel = document.getElementById('object-props-panel');
+  var pos = mesh.position;
+  var rot = mesh.rotation;
+  var scl = mesh.scale;
+
+  var html = '<div class="props-title">' + typeName(type) + '</div>';
+  html += '<div class="prop-group">';
+  html += '<div class="prop-group-title">Position</div>';
+  html += xyzRow('pos-x', 'X', pos.x.toFixed(2));
+  html += xyzRow('pos-y', 'Y', pos.y.toFixed(2));
+  html += xyzRow('pos-z', 'Z', pos.z.toFixed(2));
+  html += '</div>';
+  html += '<div class="prop-group">';
+  html += '<div class="prop-group-title">Rotation (deg)</div>';
+  html += xyzRow('rot-x', 'X', (rot.x * 180/Math.PI).toFixed(1));
+  html += xyzRow('rot-y', 'Y', (rot.y * 180/Math.PI).toFixed(1));
+  html += xyzRow('rot-z', 'Z', (rot.z * 180/Math.PI).toFixed(1));
+  html += '</div>';
+  html += '<div class="prop-group">';
+  html += '<div class="prop-group-title">Scale</div>';
+  html += xyzRow('scl-x', 'X', scl.x.toFixed(2));
+  html += xyzRow('scl-y', 'Y', scl.y.toFixed(2));
+  html += xyzRow('scl-z', 'Z', scl.z.toFixed(2));
+  html += '</div>';
+  html += '<div class="props-divider"></div>';
+
+  // Type-specific
+  if (type === 'boost_large' || type === 'boost_small') {
+    html += '<div class="prop-group">';
+    html += '<div class="prop-row"><label>Size</label><select id="pp-size"><option value="large"' + (p.size==='large'?' selected':'') + '>Large</option><option value="small"' + (p.size==='small'?' selected':'') + '>Small</option></select></div>';
+    html += '<div class="prop-row"><label>Respawn</label><input type="number" id="pp-respawn" value="' + (p.respawnTime||10) + '" min="1" max="60" step="1"> s</div>';
+    html += '</div>';
+  } else if (type === 'goal_blue' || type === 'goal_orange' || d.type === 'goal') {
+    html += '<div class="prop-group">';
+    html += '<div class="prop-row"><label>Team</label><select id="pp-team"><option value="0"' + (p.team===0?' selected':'') + '>Blue (0)</option><option value="1"' + (p.team===1?' selected':'') + '>Orange (1)</option></select></div>';
+    html += '<div class="prop-row"><label>Width</label><input type="number" id="pp-gw" value="' + (p.width||21) + '" min="0.5" step="0.5"></div>';
+    html += '<div class="prop-row"><label>Height</label><input type="number" id="pp-gh" value="' + (p.height||8) + '" min="0.5" step="0.5"></div>';
+    html += '<div class="prop-row"><label>Depth</label><input type="number" id="pp-gd" value="' + (p.depth||5) + '" min="0.5" step="0.5"></div>';
+    html += '</div>';
+  } else if (type === 'spawn_blue' || type === 'spawn_orange') {
+    html += '<div class="prop-group">';
+    html += '<div class="prop-row"><label>Team</label><select id="pp-spawn-team"><option value="0"' + (p.team===0?' selected':'') + '>Blue</option><option value="1"' + (p.team===1?' selected':'') + '>Orange</option></select></div>';
+    html += '<div class="prop-row"><label>Index</label><input type="number" id="pp-spawn-idx" value="' + (p.index||0) + '" min="0" max="7" step="1"></div>';
+    html += '</div>';
+  }
+
+  html += '<button class="action-btn" id="pp-delete" style="width:100%;margin-top:8px;color:#ff8888;border-color:#aa4444">Delete Object</button>';
+
+  panel.innerHTML = html;
+
+  // Bind live position/rotation/scale inputs
+  bindXYZInputs(mesh);
+
+  // Type-specific binds
+  if (type === 'boost_large' || type === 'boost_small') {
+    var sizeEl = document.getElementById('pp-size');
+    if (sizeEl) sizeEl.addEventListener('change', function() {
+      var old = d.properties.size;
+      history.execute(new SetPropertyCmd(mesh, 'size', old, this.value));
+    });
+    var respEl = document.getElementById('pp-respawn');
+    if (respEl) respEl.addEventListener('change', function() {
+      var old = d.properties.respawnTime;
+      history.execute(new SetPropertyCmd(mesh, 'respawnTime', old, parseFloat(this.value)));
+    });
+  } else if (d.type === 'goal' || type === 'goal_blue' || type === 'goal_orange') {
+    bindGoalInput(mesh, 'pp-gw', 'width', p.width||21);
+    bindGoalInput(mesh, 'pp-gh', 'height', p.height||8);
+    bindGoalInput(mesh, 'pp-gd', 'depth', p.depth||5);
+    var teamEl = document.getElementById('pp-team');
+    if (teamEl) teamEl.addEventListener('change', function() {
+      var old = d.properties.team;
+      history.execute(new SetPropertyCmd(mesh, 'team', old, parseInt(this.value)));
+    });
+  }
+
+  var delBtn = document.getElementById('pp-delete');
+  if (delBtn) delBtn.addEventListener('click', function() {
+    history.execute(new RemoveObjectCmd(mesh));
+    deselectAll();
+  });
+}
+
+function bindGoalInput(mesh, elId, prop, defVal) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  el.addEventListener('change', function() {
+    var old = mesh.userData.objectData.properties[prop] || defVal;
+    var newVal = parseFloat(this.value) || defVal;
+    history.execute(new SetPropertyCmd(mesh, prop, old, newVal));
+  });
+}
+
+function bindXYZInputs(mesh) {
+  function bindAxis(id, setter) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', function() {
+      var v = parseFloat(this.value);
+      if (isNaN(v)) return;
+      setter(v);
+      syncMeshToData(mesh);
+      if (_boxHelper) _boxHelper.update();
+      autoSave();
+    });
+  }
+  bindAxis('pos-x', function(v) { mesh.position.x = v; });
+  bindAxis('pos-y', function(v) { mesh.position.y = v; });
+  bindAxis('pos-z', function(v) { mesh.position.z = v; });
+  bindAxis('rot-x', function(v) { mesh.rotation.x = v * Math.PI/180; });
+  bindAxis('rot-y', function(v) { mesh.rotation.y = v * Math.PI/180; });
+  bindAxis('rot-z', function(v) { mesh.rotation.z = v * Math.PI/180; });
+  bindAxis('scl-x', function(v) { mesh.scale.x = v; });
+  bindAxis('scl-y', function(v) { mesh.scale.y = v; });
+  bindAxis('scl-z', function(v) { mesh.scale.z = v; });
+}
+
+function xyzRow(id, label, val) {
+  return '<div class="xyz-row"><label>' + label + '</label><input type="number" id="' + id + '" value="' + val + '" step="0.1"></div>';
+}
+
+function typeName(type) {
+  var names = {
+    boost_large: 'Large Boost', boost_small: 'Small Boost',
+    goal: 'Goal', goal_blue: 'Goal (Blue)', goal_orange: 'Goal (Orange)',
+    spawn_blue: 'Spawn Blue', spawn_orange: 'Spawn Orange', ball_spawn: 'Ball Spawn'
+  };
+  return names[type] || type;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Goal presets
+// ────────────────────────────────────────────────────────────────────────────
+function applyGoalPreset(name) {
+  var cmds = [];
+  // Remove existing goals
+  var goalObjs = _objects.filter(function(o) { return o.data.type === 'goal'; });
+  goalObjs.forEach(function(o) { cmds.push(new RemoveObjectCmd(o.mesh)); });
+
+  var a = arenaConfig.arena;
+  var hw = a.fw / 2, hl = a.fl / 2, wh = a.wh;
+
+  function mkGoalCmd(team, x, y, z, rx, ry, rz, gw, gh, gd) {
+    var type = (team === 0) ? 'goal_blue' : 'goal_orange';
+    var id = _objectIdCounter++;
+    var props = { team: team, width: gw || 21, height: gh || 8, depth: gd || 5 };
+    return {
+      execute: function() {
+        var data = makeObjectData(type, [x, y, z], id, props);
+        data.rotation = [rx || 0, ry || 0, rz || 0];
+        arenaConfig.objects.push(data);
+        var mesh = addObjectMesh(data);
+        mesh.rotation.set(rx || 0, ry || 0, rz || 0);
+      },
+      undo: function() { removeObjectById(id); }
+    };
+  }
+
+  if (name === 'standard') {
+    cmds.push(mkGoalCmd(0, 0, 0, -hl, 0, 0, 0, 21, 8, 5));
+    cmds.push(mkGoalCmd(1, 0, 0,  hl, 0, Math.PI, 0, 21, 8, 5));
+  } else if (name === 'impossible') {
+    cmds.push(mkGoalCmd(0, 0, 0, -hl, 0, 0, 0, 2, 1.5, 3));
+    cmds.push(mkGoalCmd(1, 0, 0,  hl, 0, Math.PI, 0, 2, 1.5, 3));
+  } else if (name === 'triple') {
+    var gw3 = 18, gh3 = 7;
+    for (var dx = -1; dx <= 1; dx++) {
+      cmds.push(mkGoalCmd(0, dx * (gw3 + 2), 0, -hl, 0, 0, 0, gw3, gh3, 4));
+      cmds.push(mkGoalCmd(1, dx * (gw3 + 2), 0,  hl, 0, Math.PI, 0, gw3, gh3, 4));
+    }
+  } else if (name === 'double') {
+    var ang = 20 * Math.PI / 180;
+    cmds.push(mkGoalCmd(0, -a.fw*0.2, 0, -hl, 0, ang, 0, 18, 8, 5));
+    cmds.push(mkGoalCmd(0,  a.fw*0.2, 0, -hl, 0, -ang, 0, 18, 8, 5));
+    cmds.push(mkGoalCmd(1, -a.fw*0.2, 0,  hl, 0, Math.PI + ang, 0, 18, 8, 5));
+    cmds.push(mkGoalCmd(1,  a.fw*0.2, 0,  hl, 0, Math.PI - ang, 0, 18, 8, 5));
+  } else if (name === 'wall_goals') {
+    // Goals on side walls, rotated to face inward
+    cmds.push(mkGoalCmd(0,  hw, wh/4, 0, 0, Math.PI/2, 0, a.fl * 0.3, wh * 0.4, 5));
+    cmds.push(mkGoalCmd(1, -hw, wh/4, 0, 0, -Math.PI/2, 0, a.fl * 0.3, wh * 0.4, 5));
+  } else if (name === 'giant') {
+    cmds.push(mkGoalCmd(0, 0, 0, -hl, 0, 0, 0, a.fw * 0.8, wh * 0.7, 8));
+    cmds.push(mkGoalCmd(1, 0, 0,  hl, 0, Math.PI, 0, a.fw * 0.8, wh * 0.7, 8));
+  } else if (name === 'ceiling') {
+    // Goals on ceiling, facing downward
+    cmds.push(mkGoalCmd(0, -a.fw*0.2, wh, 0, Math.PI/2, 0, 0, 20, 8, 5));
+    cmds.push(mkGoalCmd(1,  a.fw*0.2, wh, 0, Math.PI/2, 0, 0, 20, 8, 5));
+  }
+
+  history.execute(new CompoundCmd(cmds));
+  showToast('Goal preset: ' + name.replace(/_/g,' '), '');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Auto-Layout (standard RL positions)
+// ────────────────────────────────────────────────────────────────────────────
+function autoLayout() {
+  var cmds = [];
+
+  // Clear all objects
+  _objects.forEach(function(o) { cmds.push(new RemoveObjectCmd(o.mesh)); });
+
+  // Large boost pads
+  STD_LARGE_PADS.forEach(function(p) {
+    var id = _objectIdCounter++;
+    var pos = [p[0], 0, p[2]];
+    cmds.push({
+      execute: function() {
+        var data = makeObjectData('boost_large', pos, id, {});
+        arenaConfig.objects.push(data);
+        addObjectMesh(data);
+      },
+      undo: function() { removeObjectById(id); }
+    });
+  });
+
+  // Small boost pads
+  STD_SMALL_PADS.forEach(function(p) {
+    var id = _objectIdCounter++;
+    var pos = [p[0], 0, p[2]];
+    cmds.push({
+      execute: function() {
+        var data = makeObjectData('boost_small', pos, id, {});
+        arenaConfig.objects.push(data);
+        addObjectMesh(data);
+      },
+      undo: function() { removeObjectById(id); }
+    });
+  });
+
+  // Blue spawns (5 positions)
+  var blueSpawns = [
+    [-2048/SCALE_UU, 0, -2560/SCALE_UU, -Math.PI*0.25],
+    [ 2048/SCALE_UU, 0, -2560/SCALE_UU, Math.PI*0.25],
+    [0,              0, -3840/SCALE_UU, 0],
+    [-256/SCALE_UU,  0, -3840/SCALE_UU, 0],
+    [ 256/SCALE_UU,  0, -3840/SCALE_UU, 0]
+  ];
+  blueSpawns.forEach(function(sp, i) {
+    var id = _objectIdCounter++;
+    var pos = [sp[0], 0, sp[2]];
+    cmds.push({
+      execute: function() {
+        var data = makeObjectData('spawn_blue', pos, id, { index: i });
+        data.rotation = [0, sp[3] || 0, 0];
+        arenaConfig.objects.push(data);
+        var mesh = addObjectMesh(data);
+        mesh.rotation.y = sp[3] || 0;
+      },
+      undo: function() { removeObjectById(id); }
+    });
+  });
+
+  // Orange spawns (5 positions — mirrored)
+  blueSpawns.forEach(function(sp, i) {
+    var id = _objectIdCounter++;
+    var pos = [sp[0], 0, -sp[2]];
+    cmds.push({
+      execute: function() {
+        var data = makeObjectData('spawn_orange', pos, id, { index: i });
+        data.rotation = [0, -(sp[3] || 0) + Math.PI, 0];
+        arenaConfig.objects.push(data);
+        var mesh = addObjectMesh(data);
+        mesh.rotation.y = -(sp[3] || 0) + Math.PI;
+      },
+      undo: function() { removeObjectById(id); }
+    });
+  });
+
+  // Ball spawn
+  var bsId = _objectIdCounter++;
+  cmds.push({
+    execute: function() {
+      var data = makeObjectData('ball_spawn', [0, 0, 0], bsId, {});
+      arenaConfig.objects.push(data);
+      addObjectMesh(data);
+    },
+    undo: function() { removeObjectById(bsId); }
+  });
+
+  history.execute(new CompoundCmd(cmds));
+
+  // Add standard goals after layout
+  applyGoalPreset('standard');
+  showToast('Auto-layout applied: ' + STD_LARGE_PADS.length + ' large + ' + STD_SMALL_PADS.length + ' small pads', '');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Camera controls
+// ────────────────────────────────────────────────────────────────────────────
+function resetCamera() {
+  camera.position.set(0, 80, 80);
+  camera.lookAt(0, 0, 0);
+  orbitControls.target.set(0, 0, 0);
+  orbitControls.update();
+}
+
+function setCameraTop() {
+  camera.position.set(0, 200, 0.001);
+  camera.lookAt(0, 0, 0);
+  orbitControls.target.set(0, 0, 0);
+  orbitControls.update();
+}
+
+function setGizmoMode(mode) {
+  _gizmoMode = mode;
+  transformControls.setMode(mode);
+  ['translate','rotate','scale'].forEach(function(m) {
+    document.getElementById('btn-' + m).classList.toggle('active', m === mode);
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Keyboard shortcuts
+// ────────────────────────────────────────────────────────────────────────────
+function onKeyDown(e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === 'z' || e.key === 'Z') {
+      if (e.shiftKey) history.redo();
+      else history.undo();
+      e.preventDefault(); return;
+    }
+    if (e.key === 'y' || e.key === 'Y') { history.redo(); e.preventDefault(); return; }
+    if (e.key === 's' || e.key === 'S') { saveMap(); e.preventDefault(); return; }
+    if (e.key === 'e' || e.key === 'E') { exportToRL(); e.preventDefault(); return; }
+    if (e.key === 'l' || e.key === 'L') { restoreAutosave(); e.preventDefault(); return; }
+    return;
+  }
+
+  switch (e.key) {
+    case 'w': case 'W': setGizmoMode('translate'); break;
+    case 'e': case 'E': setGizmoMode('rotate'); break;
+    case 'r': case 'R': setGizmoMode('scale'); break;
+    case 'q': case 'Q':
+      _snapEnabled = !_snapEnabled;
+      document.getElementById('chk-snap').checked = _snapEnabled;
+      showToast('Grid snap: ' + (_snapEnabled ? 'ON' : 'OFF'), '');
+      break;
+    case 'Delete': case 'Backspace':
+      if (_selected) {
+        history.execute(new RemoveObjectCmd(_selected));
+        deselectAll();
+      }
+      break;
+    case 'Escape':
+      if (_placementType) cancelPlacement();
+      else deselectAll();
+      break;
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Save / Load / AutoSave
+// ────────────────────────────────────────────────────────────────────────────
+function saveMap() {
+  var blob = new Blob([JSON.stringify(arenaConfig, null, 2)], { type: 'application/json' });
+  triggerDownload(blob, 'arena_map.json');
+  showToast('Map saved', '');
+}
+
+function loadMap(jsonStr) {
+  try {
+    var parsed = JSON.parse(jsonStr);
+    arenaConfig = parsed;
+    buildArena();
+    rebuildObjects();
+    history.undoStack = [];
+    history.redoStack = [];
+    updateStatus();
+    showToast('Map loaded: ' + arenaConfig.objects.length + ' objects', '');
+  } catch(err) {
+    showToast('Load failed: ' + err.message, 'warn');
+  }
+}
+
+function autoSave() {
+  try { localStorage.setItem('rl_map_designer_autosave', JSON.stringify(arenaConfig)); } catch(e) {}
+}
+
+function restoreAutosave() {
+  if (window._pendingRestore) {
+    loadMap(window._pendingRestore);
+    window._pendingRestore = null;
+  } else {
+    var saved = localStorage.getItem('rl_map_designer_autosave');
+    if (saved) loadMap(saved);
+    else showToast('No auto-save found', 'warn');
+  }
+}
+
+function triggerDownload(blob, filename) {
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Export JSON
+// ────────────────────────────────────────────────────────────────────────────
+function serializeArena() {
+  // Build export with UU coordinates (multiply by SCALE_UU)
+  var out = JSON.parse(JSON.stringify(arenaConfig));
+  out.arena.fw_uu    = Math.round(out.arena.fw    * SCALE_UU);
+  out.arena.fl_uu    = Math.round(out.arena.fl    * SCALE_UU);
+  out.arena.wh_uu    = Math.round(out.arena.wh    * SCALE_UU);
+  out.arena.cornerR_uu = Math.round(out.arena.cornerR * SCALE_UU);
+  out.objects.forEach(function(obj) {
+    obj.position_uu = obj.position.map(function(v) { return Math.round(v * SCALE_UU); });
+    if (obj.type === 'goal') {
+      obj.properties.width_uu  = Math.round((obj.properties.width||21)  * SCALE_UU);
+      obj.properties.height_uu = Math.round((obj.properties.height||8)  * SCALE_UU);
+      obj.properties.depth_uu  = Math.round((obj.properties.depth||5)   * SCALE_UU);
+    }
+  });
+  return out;
+}
+
+function exportJSON() {
+  var data = serializeArena();
+  var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  triggerDownload(blob, 'arena_manifest.json');
+  showToast('Exported arena_manifest.json (coordinates in Unreal Units)', '');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Export T3D
+// ────────────────────────────────────────────────────────────────────────────
+function exportT3D() {
+  var lines = ['Begin Map'];
+  arenaConfig.objects.forEach(function(obj, idx) {
+    var actorClass = t3dActorClass(obj.type);
+    var uu = obj.position.map(function(v) { return (v * SCALE_UU).toFixed(1); });
+    lines.push('   Begin Actor Class=' + actorClass + ' Name=' + actorClass + '_' + idx);
+    lines.push('      Location=(X=' + uu[0] + ',Y=' + uu[2] + ',Z=' + uu[1] + ')');
+    var rot = obj.rotation;
+    var pitch = Math.round(rot[0] * 10430.38); // rad → Unreal rotation units
+    var yaw   = Math.round(rot[1] * 10430.38);
+    var roll  = Math.round(rot[2] * 10430.38);
+    lines.push('      Rotation=(Pitch=' + pitch + ',Yaw=' + yaw + ',Roll=' + roll + ')');
+    if (obj.type === 'goal') {
+      var gw = ((obj.properties.width  || 21) * SCALE_UU).toFixed(1);
+      var gh = ((obj.properties.height || 8)  * SCALE_UU).toFixed(1);
+      var gd = ((obj.properties.depth  || 5)  * SCALE_UU).toFixed(1);
+      lines.push('      DrawScale3D=(X=' + gw + ',Y=' + gd + ',Z=' + gh + ')');
+      lines.push('      Team=' + (obj.properties.team || 0));
+    }
+    lines.push('   End Actor');
+  });
+  lines.push('End Map');
+
+  var blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+  triggerDownload(blob, 'arena_objects.t3d');
+  showToast('Exported arena_objects.t3d (paste in UDK via Edit > Paste Here)', '');
+}
+
+function t3dActorClass(type) {
+  var m = {
+    boost_large: 'VehiclePickup_Boost_TA',
+    boost_small: 'VehiclePickup_Boost_TA',
+    goal:        'GoalVolume_TA',
+    spawn_blue:  'PlayerStart_TA',
+    spawn_orange:'PlayerStart_TA',
+    ball_spawn:  'Pylon_Soccar_TA'
+  };
+  return m[type] || 'StaticMeshActor';
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Export to Rocket League (server pipeline)
+// ────────────────────────────────────────────────────────────────────────────
+function exportToRL() {
+  var data = serializeArena();
+  showToast('Sending to export server...', '');
+  fetch('http://localhost:8081/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      showToast('Loaded in Rocket League!', '');
+    } else {
+      showToast('Export error: ' + (d.error || 'unknown'), 'warn');
+    }
+  })
+  .catch(function() {
+    showToast('Server not running — run: python3 scripts/server.py\n(Use "Export JSON" / "Export T3D" as fallback)', 'warn');
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Workshop publish modal
+// ────────────────────────────────────────────────────────────────────────────
+function openPublishModal() {
+  document.getElementById('modal-title').value = arenaConfig.meta.title || '';
+  document.getElementById('modal-desc').value = arenaConfig.meta.description || '';
+  document.getElementById('modal-preview').value = arenaConfig.meta.previewPath || '';
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function confirmPublish() {
+  var title = document.getElementById('modal-title').value.trim();
+  var desc  = document.getElementById('modal-desc').value.trim();
+  var prev  = document.getElementById('modal-preview').value.trim();
+  if (!title) { showToast('Please enter a map title', 'warn'); return; }
+
+  arenaConfig.meta.title = title;
+  arenaConfig.meta.description = desc;
+  arenaConfig.meta.previewPath = prev;
+  document.getElementById('modal-overlay').classList.remove('show');
+
+  var data = serializeArena();
+  showToast('Publishing to Steam Workshop...', '');
+  fetch('http://localhost:8081/publish', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      showToast('Published to Steam Workshop! ID: ' + (d.publishedfileid || '?'), '');
+    } else {
+      showToast('Publish failed: ' + (d.error || 'unknown'), 'warn');
+    }
+  })
+  .catch(function() {
+    showToast('Server not running — run: python3 scripts/server.py', 'warn');
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Status / Toast
+// ────────────────────────────────────────────────────────────────────────────
+function updateStatus() {
+  var txt = _objects.length + ' objects | Undo: ' + history.undoStack.length + ' | Redo: ' + history.redoStack.length;
+  document.getElementById('status-text').textContent = txt;
+}
+
+function showToast(msg, type) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (type === 'warn' ? ' warn' : '');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function() { el.classList.remove('show'); }, 3500);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Bootstrap
+// ────────────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

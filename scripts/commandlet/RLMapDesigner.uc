@@ -1,20 +1,16 @@
 /**
  * RLMapDesigner Commandlet
- * Reads arena_build.json and creates a UDK map with:
- *   - Arena geometry (scaled StaticMeshActors for floor/walls/ceiling)
- *   - VehiclePickup_Boost_TA actors (boost pads)
- *   - GoalVolume_TA actors (goals, freely sized/positioned/rotated)
- *   - PlayerStart_TA actors (spawn points)
- *   - Pylon_Soccar_TA actor (ball spawn)
- * Outputs: UDKGame/Content/Maps/RLMapDesigner_Output.udk
+ * Reads arena JSON from config (set via UDKRLMapDesigner.ini by server.py)
+ * and creates a UDK map with arena geometry + all placed objects.
  *
  * Compile once: UDK.exe make -full
  * Run:          UDK.exe RLMapDesigner -run=RLMapDesignerCommandlet -noprompt
  */
 class RLMapDesignerCommandlet extends Commandlet
-    config(RLMapDesigner);
+    config(RLMapDesigner)
+    dependson(IpDrv.JsonObject);
 
-// Path to the arena JSON file — set by server.py via UDKRLMapDesigner.ini
+// Path to arena JSON file — set by server.py via UDKRLMapDesigner.ini
 var config string JsonPath;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -23,22 +19,22 @@ var config string JsonPath;
 function int Main(string Params)
 {
     local string JsonText;
-    local JsonObject RootConfig, Arena, ObjectsArray, ObjEntry;
+    local IpDrv.JsonObject RootConfig, Arena, ObjectsArray, ObjEntry;
     local int i, NumObjects;
     local string ObjType;
 
     `log("RLMapDesigner: Starting commandlet");
     `log("RLMapDesigner: JsonPath=" $ JsonPath);
 
-    // Read JSON
+    // Read JSON via FileHelper (Editor package)
     JsonText = "";
-    if (!class'FileHelper'.static.ReadStringFromFile(JsonPath, JsonText))
+    if (!class'Editor.FileHelper'.static.ReadStringFromFile(JsonPath, JsonText))
     {
         `error("RLMapDesigner: Failed to read JSON from: " $ JsonPath);
         return 1;
     }
 
-    RootConfig = class'JsonObject'.static.DecodeJson(JsonText);
+    RootConfig = class'IpDrv.JsonObject'.static.DecodeJson(JsonText);
     if (RootConfig == None)
     {
         `error("RLMapDesigner: Failed to parse JSON");
@@ -86,123 +82,117 @@ function int Main(string Params)
 // ─────────────────────────────────────────────────────────────────────────────
 //  Arena geometry
 // ─────────────────────────────────────────────────────────────────────────────
-function BuildArenaGeometry(JsonObject Arena)
+function BuildArenaGeometry(IpDrv.JsonObject Arena)
 {
-    local float FW, FL, WH, CR;
+    local float FW, FL, WH;
     local bool  HasWalls, HasCeiling;
     local StaticMeshActor Panel;
-    local StaticMesh FloorMesh, WallMesh;
+    local StaticMesh FloorMesh;
 
-    // Dimensions in Unreal Units (already multiplied by 85.3 by server.py)
+    // Dimensions in Unreal Units (pre-multiplied by 85.333 by server.py)
     FW = Arena.GetFloatValue("fw_uu");
     FL = Arena.GetFloatValue("fl_uu");
     WH = Arena.GetFloatValue("wh_uu");
-    CR = Arena.GetFloatValue("cornerR_uu");
-    HasWalls    = Arena.GetIntValue("walls") != 0;
-    HasCeiling  = Arena.GetIntValue("ceiling") != 0;
+    HasWalls   = Arena.GetIntValue("walls") != 0;
+    HasCeiling = Arena.GetIntValue("ceiling") != 0;
 
     `log("RLMapDesigner: Arena " $ FW $ "x" $ FL $ "x" $ WH $ " UU");
 
-    // Floor
-    Panel = Spawn(class'StaticMeshActor', None, 'Floor',
-        vect(0, 0, 0), rot(0, 0, 0));
+    FloorMesh = StaticMesh(DynamicLoadObject("Stadium_OOB.Floor_Plane", class'StaticMesh'));
+
+    // Floor — use '' for Name to avoid conflicts on re-run
+    Panel = Spawn(class'StaticMeshActor', None, '', vect(0,0,0), rot(0,0,0));
     if (Panel != None)
     {
-        Panel.StaticMeshComponent.SetStaticMesh(
-            StaticMesh(DynamicLoadObject("Stadium_OOB.Floor_Plane", class'StaticMesh')));
-        Panel.SetDrawScale3D(vect(1,1,1) * 0.0);  // will be set properly below
-        // Use actual floor panel from RL dummy assets, scaled to arena dimensions
-        Panel.StaticMeshComponent.SetTranslation(vect(0, 0, 0));
-        // DrawScale3D: X=FW/100, Y=FL/100 (base mesh is 100x100 UU)
-        Panel.DrawScale3D.X = FW / 100.0;
-        Panel.DrawScale3D.Y = FL / 100.0;
-        Panel.DrawScale3D.Z = 1.0;
+        Panel.StaticMeshComponent.SetStaticMesh(FloorMesh);
+        Panel.SetDrawScale3D(MakeVector(FW / 100.0, FL / 100.0, 1.0));
     }
 
     if (HasWalls)
     {
-        // +X wall
-        SpawnWallPanel(FW/2, 0, WH/2, 0, FL, WH, 0, 16384);
-        // -X wall
-        SpawnWallPanel(-FW/2, 0, WH/2, 0, FL, WH, 0, -16384);
-        // +Z wall (end wall)
-        SpawnWallPanel(0, FL/2, WH/2, FL, 0, WH, 16384, 0);
-        // -Z wall (end wall)
-        SpawnWallPanel(0, -FL/2, WH/2, FL, 0, WH, -16384, 0);
+        // +X side wall
+        SpawnWallPanel( FW/2, 0, WH/2, FL, WH, 0, 16384);
+        // -X side wall
+        SpawnWallPanel(-FW/2, 0, WH/2, FL, WH, 0, -16384);
+        // +Y end wall (FW wide — end wall spans the arena width)
+        SpawnWallPanel(0,  FL/2, WH/2, FW, WH, 16384, 0);
+        // -Y end wall
+        SpawnWallPanel(0, -FL/2, WH/2, FW, WH, -16384, 0);
     }
 
     if (HasCeiling)
     {
-        Panel = Spawn(class'StaticMeshActor', None, 'Ceiling',
-            MakeVector(0, 0, WH), rot(32768, 0, 0));
+        Panel = Spawn(class'StaticMeshActor', None, '', MakeVector(0, 0, WH), MakeRotator(32768, 0, 0));
         if (Panel != None)
         {
-            Panel.DrawScale3D.X = FW / 100.0;
-            Panel.DrawScale3D.Y = FL / 100.0;
-            Panel.DrawScale3D.Z = 1.0;
+            Panel.StaticMeshComponent.SetStaticMesh(FloorMesh);
+            Panel.SetDrawScale3D(MakeVector(FW / 100.0, FL / 100.0, 1.0));
         }
     }
 }
 
 function SpawnWallPanel(
     float PX, float PY, float PZ,
-    float ScaleX, float ScaleY, float ScaleZ,
+    float ScaleX, float ScaleZ,
     int Pitch, int Yaw)
 {
     local StaticMeshActor Panel;
+    local StaticMesh WallMesh;
+    WallMesh = StaticMesh(DynamicLoadObject("Stadium_OOB.Floor_Plane", class'StaticMesh'));
     Panel = Spawn(class'StaticMeshActor', None, '',
         MakeVector(PX, PY, PZ), MakeRotator(Pitch, Yaw, 0));
     if (Panel != None)
     {
-        Panel.DrawScale3D.X = max(ScaleX, 1.0) / 100.0;
-        Panel.DrawScale3D.Y = max(ScaleY, 1.0) / 100.0;
-        Panel.DrawScale3D.Z = max(ScaleZ, 1.0) / 100.0;
+        Panel.StaticMeshComponent.SetStaticMesh(WallMesh);
+        Panel.SetDrawScale3D(MakeVector(max(ScaleX, 1.0) / 100.0, 0.01, max(ScaleZ, 1.0) / 100.0));
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Object placement helpers
 // ─────────────────────────────────────────────────────────────────────────────
-function Vector GetPosition(JsonObject Obj)
+function Vector GetPosition(IpDrv.JsonObject Obj)
 {
-    local JsonObject PosUU;
+    local IpDrv.JsonObject PosUU;
     local Vector V;
-    // position_uu array: [x_uu, y_uu, z_uu]  (already in Unreal Units)
+    // position_uu: [x_uu, y_uu, z_uu] in Three.js space
+    // Three.js X → UE X, Three.js Y → UE Z, Three.js Z → UE -Y (LH flip)
     PosUU = Obj.GetObject("position_uu");
     if (PosUU != None && PosUU.ValueArray.Length >= 3)
     {
-        V.X = float(PosUU.ValueArray[0].StringValue);
-        V.Y = -float(PosUU.ValueArray[2].StringValue);  // Three.js +Z → UE -Y (RH→LH flip)
-        V.Z = float(PosUU.ValueArray[1].StringValue);  // Three.js Y → UE Z
+        V.X =  PosUU.ValueArray[0].FloatValue;
+        V.Y = -PosUU.ValueArray[2].FloatValue;  // Three.js +Z → UE -Y
+        V.Z =  PosUU.ValueArray[1].FloatValue;  // Three.js Y → UE Z
     }
     return V;
 }
 
-function Rotator GetRotation(JsonObject Obj)
+function Rotator GetRotation(IpDrv.JsonObject Obj)
 {
-    local JsonObject RotArr;
+    local IpDrv.JsonObject RotArr;
     local Rotator R;
     local float RX, RY, RZ;
     RotArr = Obj.GetObject("rotation");
     if (RotArr != None && RotArr.ValueArray.Length >= 3)
     {
-        RX = float(RotArr.ValueArray[0].StringValue);  // pitch (rad)
-        RY = float(RotArr.ValueArray[1].StringValue);  // yaw
-        RZ = float(RotArr.ValueArray[2].StringValue);  // roll
-        // rad → Unreal rotation units (1 rad = 10430.38 URU)
-        R.Pitch = int(RZ * 10430.38);  // Three.js Z-rot → UE Pitch
-        R.Yaw   = int(RY * 10430.38);  // Three.js Y-rot → UE Yaw
-        R.Roll  = int(RX * 10430.38);  // Three.js X-rot → UE Roll
+        RX = RotArr.ValueArray[0].FloatValue;  // Three.js X (rad)
+        RY = RotArr.ValueArray[1].FloatValue;  // Three.js Y (rad)
+        RZ = RotArr.ValueArray[2].FloatValue;  // Three.js Z (rad)
+        // Three.js Z-rot → UE Pitch, Y-rot → UE Yaw, X-rot → UE Roll
+        // 1 rad = 10430.38 Unreal Rotation Units
+        R.Pitch = int(RZ * 10430.38);
+        R.Yaw   = int(RY * 10430.38);
+        R.Roll  = int(RX * 10430.38);
     }
     return R;
 }
 
-function PlaceBoostPad(JsonObject Obj)
+function PlaceBoostPad(IpDrv.JsonObject Obj)
 {
     local Vector Pos;
     local Rotator Rot;
     local VehiclePickup_Boost_TA Pad;
-    local JsonObject Props;
+    local IpDrv.JsonObject Props;
     local bool IsLarge;
 
     Pos = GetPosition(Obj);
@@ -215,13 +205,9 @@ function PlaceBoostPad(JsonObject Obj)
     {
         Pad.bIsBig = IsLarge;
         if (Props != None)
-        {
             Pad.RespawnTime = Props.GetFloatValue("respawnTime");
-        }
         if (!IsLarge)
-        {
             Pad.DrawScale = 0.7;
-        }
     }
     else
     {
@@ -229,14 +215,13 @@ function PlaceBoostPad(JsonObject Obj)
     }
 }
 
-function PlaceGoal(JsonObject Obj)
+function PlaceGoal(IpDrv.JsonObject Obj)
 {
     local Vector Pos;
     local Rotator Rot;
     local GoalVolume_TA Goal;
-    local JsonObject Props;
+    local IpDrv.JsonObject Props;
     local float GW, GH, GD;
-    local int Team;
 
     Pos = GetPosition(Obj);
     Rot = GetRotation(Obj);
@@ -245,17 +230,11 @@ function PlaceGoal(JsonObject Obj)
     Goal = Spawn(class'GoalVolume_TA', None, '', Pos, Rot);
     if (Goal != None && Props != None)
     {
-        Team = int(Props.GetStringValue("team"));
+        Goal.Team = int(Props.GetStringValue("team"));
         GW = Props.GetFloatValue("width_uu");
         GH = Props.GetFloatValue("height_uu");
         GD = Props.GetFloatValue("depth_uu");
-
-        Goal.Team = Team;
-        // Scale the brush component to match desired dimensions
-        // Base brush is 1x1x1 UU; DrawScale3D sets actual size
-        Goal.DrawScale3D.X = max(GW, 1.0);
-        Goal.DrawScale3D.Y = max(GD, 1.0);
-        Goal.DrawScale3D.Z = max(GH, 1.0);
+        Goal.SetDrawScale3D(MakeVector(max(GW, 1.0), max(GD, 1.0), max(GH, 1.0)));
     }
     else
     {
@@ -263,12 +242,12 @@ function PlaceGoal(JsonObject Obj)
     }
 }
 
-function PlacePlayerStart(JsonObject Obj)
+function PlacePlayerStart(IpDrv.JsonObject Obj)
 {
     local Vector Pos;
     local Rotator Rot;
     local PlayerStart_TA Start;
-    local JsonObject Props;
+    local IpDrv.JsonObject Props;
 
     Pos = GetPosition(Obj);
     Rot = GetRotation(Obj);
@@ -276,12 +255,10 @@ function PlacePlayerStart(JsonObject Obj)
 
     Start = Spawn(class'PlayerStart_TA', None, '', Pos, Rot);
     if (Start != None && Props != None)
-    {
         Start.TeamNum = int(Props.GetStringValue("team"));
-    }
 }
 
-function PlaceBallSpawn(JsonObject Obj)
+function PlaceBallSpawn(IpDrv.JsonObject Obj)
 {
     local Vector Pos;
     local Rotator Rot;
@@ -292,9 +269,7 @@ function PlaceBallSpawn(JsonObject Obj)
 
     BallSpawn = Spawn(class'Pylon_Soccar_TA', None, '', Pos, Rot);
     if (BallSpawn == None)
-    {
         `warn("RLMapDesigner: Failed to spawn ball spawn at " $ Pos);
-    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -303,17 +278,20 @@ function PlaceBallSpawn(JsonObject Obj)
 function SaveMap()
 {
     local string OutPath;
+    local WorldInfo WI;
     OutPath = "UDKGame/Content/Maps/RLMapDesigner_Output";
     `log("RLMapDesigner: Saving map to " $ OutPath);
 
-    if (!SavePackage(GetCurrentWorld().GetOutermost(), OutPath, 0, "", None))
+    WI = class'WorldInfo'.static.GetWorldInfo();
+    if (WI == None)
     {
+        `error("RLMapDesigner: Could not get WorldInfo for SavePackage");
+        return;
+    }
+    if (!SavePackage(WI.GetOutermost(), OutPath, 0, "", None))
         `error("RLMapDesigner: SavePackage failed for " $ OutPath);
-    }
     else
-    {
         `log("RLMapDesigner: Map saved successfully.");
-    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -336,7 +314,7 @@ static function Rotator MakeRotator(int Pitch, int Yaw, int Roll)
 defaultproperties
 {
     IsClient=False
-    IsEditor=False
+    IsEditor=True
     IsServer=True
     LogToConsole=True
     ShowErrorCount=True

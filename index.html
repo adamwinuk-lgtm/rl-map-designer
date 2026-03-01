@@ -102,7 +102,7 @@ body { background: #111; color: #ccc; font-family: 'Segoe UI', Arial, sans-serif
 
 /* ── Toast ── */
 #toast {
-  position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+  position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
   background: #333355; color: #fff; padding: 8px 18px; border-radius: 6px;
   font-size: 13px; pointer-events: none; opacity: 0; transition: opacity 0.3s;
   z-index: 1000; max-width: 500px; text-align: center;
@@ -120,6 +120,7 @@ body { background: #111; color: #ccc; font-family: 'Segoe UI', Arial, sans-serif
 #modal-box {
   background: #1e1e2e; border: 1px solid #444; border-radius: 8px;
   padding: 20px; width: 380px; max-width: 95vw;
+  max-height: 90vh; overflow-y: auto;
 }
 #modal-box h2 { font-size: 15px; color: #88aaff; margin-bottom: 14px; }
 #modal-box label { display: block; font-size: 12px; color: #888; margin-bottom: 3px; }
@@ -228,8 +229,8 @@ body { background: #111; color: #ccc; font-family: 'Segoe UI', Arial, sans-serif
           <div class="prop-row"><label>Height</label><input type="number" id="ap-wh" value="24" step="1"></div>
           <div class="prop-row"><label>CornerR</label><input type="number" id="ap-cr" value="8" step="0.5"></div>
         </div>
-        <div class="prop-row"><label style="width:80px">Walls</label><input type="checkbox" id="ap-walls" checked></div>
-        <div class="prop-row"><label style="width:80px">Ceiling</label><input type="checkbox" id="ap-ceiling" checked></div>
+        <div class="prop-row"><label>Walls</label><input type="checkbox" id="ap-walls" checked></div>
+        <div class="prop-row"><label>Ceiling</label><input type="checkbox" id="ap-ceiling" checked></div>
         <button class="action-btn" style="width:100%;margin-top:6px" id="btn-apply-arena">Apply</button>
       </div>
       <div id="object-props-panel" style="display:none">
@@ -243,7 +244,7 @@ body { background: #111; color: #ccc; font-family: 'Segoe UI', Arial, sans-serif
 <div id="bottom-bar">
   <button class="action-btn" id="btn-save">&#x1F4BE; Save</button>
   <button class="action-btn" id="btn-load">&#x1F4C2; Load</button>
-  <input type="file" id="file-input" accept=".json" style="display:none">
+  <input type="file" id="file-input" accept=".json,.JSON" style="display:none">
   <button class="action-btn" id="btn-export-json">Export JSON</button>
   <button class="action-btn" id="btn-export-t3d">Export T3D</button>
   <button class="action-btn primary" id="btn-export-rl">&#x25BA; Export to RL</button>
@@ -346,7 +347,7 @@ var _boxHelper = null;
 var _ghostMesh = null;
 var _placementType = null;
 var _snapEnabled = true;
-var _gizmoMode = 'translate';
+// gizmo mode driven directly by transformControls.setMode()
 var _objectIdCounter = 1;
 var _toastTimer = null;
 var _transformStartPos = null;
@@ -534,7 +535,9 @@ function init() {
           autoSave();
           updateStatus();
         }
-        _transformStartPos = null;
+        _transformStartPos   = null;
+        _transformStartRot   = null;
+        _transformStartScale = null;
       }
     }
   });
@@ -814,8 +817,6 @@ function makeObjectData(type, pos, id, extraProps) {
   var storageType = type;
   if (type === 'goal_blue') storageType = 'goal';
   if (type === 'goal_orange') storageType = 'goal';
-  if (type === 'spawn_blue') storageType = 'spawn_blue';
-  if (type === 'spawn_orange') storageType = 'spawn_orange';
 
   return {
     id: id,
@@ -898,7 +899,16 @@ function createObjectMesh(type, props) {
 }
 
 function addObjectMesh(data) {
-  var type = data.paletteType || data.type;
+  var type = data.paletteType;
+  if (!type) {
+    // Reconstruct paletteType for backwards compatibility (e.g. manually edited JSON)
+    if (data.type === 'goal') {
+      type = (data.properties && data.properties.team === 0) ? 'goal_blue' : 'goal_orange';
+      data.paletteType = type;
+    } else {
+      type = data.type;
+    }
+  }
   var mesh = createObjectMesh(type, data.properties);
   mesh.position.fromArray(data.position);
   mesh.rotation.set(data.rotation[0], data.rotation[1], data.rotation[2]);
@@ -1448,7 +1458,6 @@ function setCameraTop() {
 }
 
 function setGizmoMode(mode) {
-  _gizmoMode = mode;
   transformControls.setMode(mode);
   ['translate','rotate','scale'].forEach(function(m) {
     document.getElementById('btn-' + m).classList.toggle('active', m === mode);
@@ -1658,6 +1667,7 @@ function confirmPublish() {
   arenaConfig.meta.title = title;
   arenaConfig.meta.description = desc;
   arenaConfig.meta.previewPath = prev;
+  autoSave();
   document.getElementById('modal-overlay').classList.remove('show');
 
   var data = serializeArena();

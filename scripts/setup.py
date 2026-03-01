@@ -74,9 +74,15 @@ def detect_udk():
         if pathlib.Path(p).exists():
             return p
     for drive in ["C:", "D:", "E:"]:
-        for candidate in pathlib.Path(drive + "/").rglob("UDK.exe") if pathlib.Path(drive + "/").exists() else []:
-            if "Binaries" in str(candidate):
-                return str(candidate)
+        drive_path = pathlib.Path(drive + "/")
+        if not drive_path.exists():
+            continue
+        try:
+            for candidate in drive_path.rglob("UDK.exe"):
+                if "Binaries" in str(candidate):
+                    return str(candidate)
+        except PermissionError:
+            pass  # Skip protected directories
     return None
 
 

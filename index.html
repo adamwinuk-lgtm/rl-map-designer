@@ -272,9 +272,9 @@ body { background: #111; color: #ccc; font-family: 'Segoe UI', Arial, sans-serif
 </div>
 
 <!-- Three.js via CDN -->
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/TransformControls.js"></script>
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://unpkg.com/three@0.160.0/examples/js/controls/TransformControls.js"></script>
 <script>
 'use strict';
 // ────────────────────────────────────────────────────────────────────────────
@@ -551,6 +551,7 @@ function init() {
   function onResize() {
     var center = document.getElementById('center');
     var w = center.clientWidth, h = center.clientHeight;
+    if (w === 0 || h === 0) return;
     renderer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
@@ -860,7 +861,6 @@ function createObjectMesh(type, props) {
     var fill = new THREE.Mesh(boxGeo, fillMat);
     mesh.add(fill);
     mesh.position.y = gh / 2;
-    boxGeo.dispose();
   } else if (type === 'spawn_blue' || type === 'spawn_orange') {
     color = (type === 'spawn_blue') ? 0x4488ff : 0xff6600;
     geo = new THREE.ConeGeometry(1.2, 2.5, 8);
@@ -884,7 +884,6 @@ function createObjectMesh(type, props) {
     var innerMat = new THREE.MeshStandardMaterial({ color: 0x888888, transparent: true, opacity: 0.15 });
     var inner = new THREE.Mesh(geo, innerMat);
     mesh.add(inner);
-    geo.dispose();
   } else {
     // Fallback
     mesh = new THREE.Mesh(
@@ -1066,6 +1065,7 @@ function onMouseMove(e) {
 
 function onViewportClick(e) {
   if (e.button !== 0) return;
+  if (transformControls.dragging) return;
 
   if (_placementType) {
     // Place object
@@ -1508,6 +1508,16 @@ function saveMap() {
 function loadMap(jsonStr) {
   try {
     var parsed = JSON.parse(jsonStr);
+    if (!parsed || typeof parsed !== 'object') throw new Error('Not a valid map object');
+    if (!parsed.arena || typeof parsed.arena !== 'object') throw new Error('Missing arena config');
+    if (!Array.isArray(parsed.objects)) parsed.objects = [];
+    if (!parsed.meta || typeof parsed.meta !== 'object') parsed.meta = { title: '', description: '', previewPath: '' };
+    // Strip export-only _uu fields to keep arenaConfig clean
+    ['fw_uu','fl_uu','wh_uu','cornerR_uu'].forEach(function(k) { delete parsed.arena[k]; });
+    parsed.objects.forEach(function(obj) {
+      delete obj.position_uu;
+      if (obj.properties) { ['width_uu','height_uu','depth_uu'].forEach(function(k) { delete obj.properties[k]; }); }
+    });
     arenaConfig = parsed;
     buildArena();
     rebuildObjects();
@@ -1521,7 +1531,13 @@ function loadMap(jsonStr) {
 }
 
 function autoSave() {
-  try { localStorage.setItem('rl_map_designer_autosave', JSON.stringify(arenaConfig)); } catch(e) {}
+  try {
+    localStorage.setItem('rl_map_designer_autosave', JSON.stringify(arenaConfig));
+  } catch(e) {
+    if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+      showToast('Auto-save failed: storage full. Use "Save" to download a file.', 'warn');
+    }
+  }
 }
 
 function restoreAutosave() {

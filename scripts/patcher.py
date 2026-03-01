@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 RL Map Designer — BakkesMod RCON + SteamCMD Workshop helpers.
-Used by server.py; can also be run standalone for testing.
 """
 
 import json
@@ -18,7 +17,10 @@ WORKSHOP_VDF = SCRIPTS_DIR / "workshop_upload.vdf"
 
 def load_settings():
     if SETTINGS_FILE.exists():
-        return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        try:
+            return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
     return {}
 
 
@@ -53,7 +55,7 @@ def bakkesmod_send(command, timeout=4):
 
 def load_map_via_rcon(map_name="Labs_Underpass_P"):
     """Trigger a map load in RL through BakkesMod."""
-    return bakkesmod_send("load_freeplay")
+    return bakkesmod_send("load_map " + map_name)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -63,18 +65,16 @@ def load_map_via_rcon(map_name="Labs_Underpass_P"):
 def publish_workshop(arena_json, settings):
     """
     Upload or update a Steam Workshop item for Rocket League.
-    arena_json must contain arena_json['meta'] with title, description, previewPath.
-
     Returns { ok, publishedfileid, error }.
     """
     steamcmd_path = settings.get("steamcmd_path")
-    steam_user    = settings.get("steam_user")
+    steam_user    = settings.get("steam_user", "").strip()
     last_udk_path = settings.get("last_built_udk_path")
 
     if not steamcmd_path or not pathlib.Path(steamcmd_path).exists():
         return {"ok": False, "error": "SteamCMD not found. Configure path in scripts/setup.py"}
     if not steam_user:
-        return {"ok": False, "error": "Steam username not configured. Run scripts/setup.py"}
+        return {"ok": False, "error": "Steam username is empty. Run scripts/setup.py to configure it."}
     if not last_udk_path or not pathlib.Path(last_udk_path).exists():
         return {"ok": False, "error": "No exported .udk found. Run 'Export to RL' first."}
 
@@ -85,35 +85,33 @@ def publish_workshop(arena_json, settings):
 
     # Prepare workshop content directory
     WORKSHOP_CONTENT_DIR.mkdir(parents=True, exist_ok=True)
-    # Copy built .udk into content dir
     import shutil
     shutil.copy2(last_udk_path, WORKSHOP_CONTENT_DIR / pathlib.Path(last_udk_path).name)
 
     published_id = settings.get("publishedfileid", "0")
 
-    # Sanitize strings for VDF (escape quotes)
     def vdf_str(s):
+        """Escape for VDF: replace quotes only."""
         return str(s).replace('"', '\\"')
 
-    vdf_content = '''\"workshopitem\"
-{{
-    \"appid\"           \"252950\"
-    \"publishedfileid\" \"{pid}\"
-    \"contentfolder\"   \"{content}\"
-    \"previewfile\"     \"{preview}\"
-    \"visibility\"      \"0\"
-    \"title\"           \"{title}\"
-    \"description\"     \"{desc}\"
-    \"changenote\"      \"Exported from RL Map Designer\"
-}}'''.format(
-        pid     = vdf_str(published_id),
-        content = vdf_str(str(WORKSHOP_CONTENT_DIR)).replace("\\", "/"),
-        preview = vdf_str(preview).replace("\\", "/") if preview else "",
-        title   = vdf_str(title),
-        desc    = vdf_str(description),
-    )
+    # Build VDF via concatenation (not .format) to avoid brace interpretation
+    content_path = str(WORKSHOP_CONTENT_DIR).replace("\\", "/")
+    preview_path = preview.replace("\\", "/") if preview else ""
 
-    WORKSHOP_VDF.write_text(vdf_content, encoding="utf-8")
+    vdf_lines = [
+        '"workshopitem"',
+        '{',
+        '    "appid"           "252950"',
+        '    "publishedfileid" "' + vdf_str(published_id) + '"',
+        '    "contentfolder"   "' + vdf_str(content_path) + '"',
+        '    "previewfile"     "' + vdf_str(preview_path) + '"',
+        '    "visibility"      "0"',
+        '    "title"           "' + vdf_str(title) + '"',
+        '    "description"     "' + vdf_str(description) + '"',
+        '    "changenote"      "Exported from RL Map Designer"',
+        '}',
+    ]
+    WORKSHOP_VDF.write_text("\n".join(vdf_lines), encoding="utf-8")
 
     cmd = [
         steamcmd_path,
@@ -130,7 +128,6 @@ def publish_workshop(arena_json, settings):
 
     stdout = result.stdout + result.stderr
 
-    # Extract published file ID from SteamCMD output
     m = re.search(r"publishedfileid\s*=\s*(\d+)", stdout, re.IGNORECASE)
     if not m:
         m = re.search(r"Published file id (\d+)", stdout, re.IGNORECASE)

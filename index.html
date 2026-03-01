@@ -280,7 +280,7 @@ body { background: #111; color: #ccc; font-family: 'Segoe UI', Arial, sans-serif
 // ────────────────────────────────────────────────────────────────────────────
 //  Constants
 // ────────────────────────────────────────────────────────────────────────────
-var SCALE_UU = 85.3;   // Three.js units → Unreal Units
+var SCALE_UU = 256 / 3;  // exactly 85.333... — Three.js units → Unreal Units (8192/96 = 10240/120)
 var SNAP_SIZE = 1.0;   // grid snap distance (Three.js units)
 var VERSION = 1;
 
@@ -308,9 +308,6 @@ var STD_SMALL_PADS = [
   [0,              0,  2816/SCALE_UU],
   [-940/SCALE_UU,  0,  3308/SCALE_UU], [ 940/SCALE_UU,  0,  3308/SCALE_UU],
   [-1792/SCALE_UU, 0,  4184/SCALE_UU], [ 1792/SCALE_UU, 0,  4184/SCALE_UU],
-  // center-line extras
-  [-1024/SCALE_UU, 0,  0],             [ 1024/SCALE_UU, 0,  0],
-  [0,              0, -1024/SCALE_UU], [0,              0,  1024/SCALE_UU]
 ];
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -735,11 +732,14 @@ function addWall(x, y, z, w, h, rotY, mat) {
   _arenaGroup.add(mesh);
 }
 
-function addCorner(x, z, y, w, h, rotY, mat) {
+function addCorner(cx, cz, cy, w, h, rotY, mat) {
+  var inset = w / (2 * Math.SQRT2);
   var mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
-  mesh.position.set(x - Math.sign(x) * Math.abs(Math.cos(rotY + Math.PI/4)) * w * 0.5,
-                    y,
-                    z - Math.sign(z) * Math.abs(Math.sin(rotY + Math.PI/4)) * w * 0.5);
+  mesh.position.set(
+    cx - Math.sign(cx) * inset,
+    cy,
+    cz - Math.sign(cz) * inset
+  );
   mesh.rotation.y = rotY + Math.PI / 2;
   _arenaGroup.add(mesh);
 }
@@ -756,9 +756,11 @@ function addArenaEdges(fw, fl, wh, cr) {
   ];
   var geo = new THREE.BufferGeometry().setFromPoints(pts);
   _arenaGroup.add(new THREE.Line(geo, lineMat));
-  // Ceiling outline
-  var cpts = pts.map(function(p) { return new THREE.Vector3(p.x, wh, p.z); });
-  _arenaGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(cpts), lineMat));
+  // Ceiling outline — only if ceiling is enabled
+  if (arenaConfig.arena.ceiling) {
+    var cpts = pts.map(function(p) { return new THREE.Vector3(p.x, wh, p.z); });
+    _arenaGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(cpts), lineMat));
+  }
   // Vertical edges
   [[-fw/2, fl/2],[fw/2, fl/2],[fw/2,-fl/2],[-fw/2,-fl/2]].forEach(function(xz) {
     var ep = [new THREE.Vector3(xz[0], 0, xz[1]), new THREE.Vector3(xz[0], wh, xz[1])];
@@ -1294,8 +1296,7 @@ function applyGoalPreset(name) {
         var data = makeObjectData(type, [x, y, z], id, props);
         data.rotation = [rx || 0, ry || 0, rz || 0];
         arenaConfig.objects.push(data);
-        var mesh = addObjectMesh(data);
-        mesh.rotation.set(rx || 0, ry || 0, rz || 0);
+        addObjectMesh(data);
       },
       undo: function() { removeObjectById(id); }
     };
@@ -1581,11 +1582,11 @@ function exportT3D() {
     var actorClass = t3dActorClass(obj.type);
     var uu = obj.position.map(function(v) { return (v * SCALE_UU).toFixed(1); });
     lines.push('   Begin Actor Class=' + actorClass + ' Name=' + actorClass + '_' + idx);
-    lines.push('      Location=(X=' + uu[0] + ',Y=' + uu[2] + ',Z=' + uu[1] + ')');
+    lines.push('      Location=(X=' + uu[0] + ',Y=' + (-parseFloat(uu[2])).toFixed(1) + ',Z=' + uu[1] + ')');
     var rot = obj.rotation;
-    var pitch = Math.round(rot[0] * 10430.38); // rad → Unreal rotation units
-    var yaw   = Math.round(rot[1] * 10430.38);
-    var roll  = Math.round(rot[2] * 10430.38);
+    var pitch = Math.round(rot[2] * 10430.38); // Three.js Z-rot → UE Pitch
+    var yaw   = Math.round(rot[1] * 10430.38); // Three.js Y-rot → UE Yaw
+    var roll  = Math.round(rot[0] * 10430.38); // Three.js X-rot → UE Roll
     lines.push('      Rotation=(Pitch=' + pitch + ',Yaw=' + yaw + ',Roll=' + roll + ')');
     if (obj.type === 'goal') {
       var gw = ((obj.properties.width  || 21) * SCALE_UU).toFixed(1);

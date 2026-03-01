@@ -172,7 +172,7 @@ function Vector GetPosition(JsonObject Obj)
     if (PosUU != None && PosUU.ValueArray.Length >= 3)
     {
         V.X = float(PosUU.ValueArray[0].StringValue);
-        V.Y = float(PosUU.ValueArray[2].StringValue);  // Z/Y swap: Three.js Z → UE Y
+        V.Y = -float(PosUU.ValueArray[2].StringValue);  // Three.js +Z → UE -Y (RH→LH flip)
         V.Z = float(PosUU.ValueArray[1].StringValue);  // Three.js Y → UE Z
     }
     return V;
@@ -190,9 +190,9 @@ function Rotator GetRotation(JsonObject Obj)
         RY = float(RotArr.ValueArray[1].StringValue);  // yaw
         RZ = float(RotArr.ValueArray[2].StringValue);  // roll
         // rad → Unreal rotation units (1 rad = 10430.38 URU)
-        R.Pitch = int(RX * 10430.38);
-        R.Yaw   = int(RY * 10430.38);
-        R.Roll  = int(RZ * 10430.38);
+        R.Pitch = int(RZ * 10430.38);  // Three.js Z-rot → UE Pitch
+        R.Yaw   = int(RY * 10430.38);  // Three.js Y-rot → UE Yaw
+        R.Roll  = int(RX * 10430.38);  // Three.js X-rot → UE Roll
     }
     return R;
 }

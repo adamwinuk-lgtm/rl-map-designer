@@ -13,9 +13,13 @@ import pathlib
 import shutil
 import subprocess
 import sys
-import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
+
+# Ensure scripts/ is on path so patcher can be imported from any CWD
+_scripts_dir = str(pathlib.Path(__file__).parent.resolve())
+if _scripts_dir not in sys.path:
+    sys.path.insert(0, _scripts_dir)
 
 # Optional websocket for BakkesMod RCON
 try:
@@ -81,10 +85,11 @@ def find_udk_output(settings):
         candidate = udk_root / "UDKGame" / "Content" / "Maps" / "RLMapDesigner_Output.udk"
         if candidate.exists():
             return candidate
-    # Fallback: scan common UDK paths
     for base in [r"C:\UDK", r"C:\Program Files\UDK"]:
-        for p in pathlib.Path(base).rglob("RLMapDesigner_Output.udk"):
-            return p
+        base_path = pathlib.Path(base)
+        if base_path.exists():
+            for p in base_path.rglob("RLMapDesigner_Output.udk"):
+                return p
     return None
 
 
@@ -103,7 +108,6 @@ def copy_to_rl(settings):
     if not target_dir.exists():
         return False, "RL CookedPCConsole directory not found: " + str(target_dir)
 
-    # Backup on first overwrite
     backup = target_dir / "Labs_Underpass_P.upk.bak"
     if target_file.exists() and not backup.exists():
         shutil.copy2(target_file, backup)
@@ -123,6 +127,8 @@ def bakkesmod_rcon(cmd_str):
         ws.send(cmd_str)
         ws.close()
         return True, None
+    except ConnectionRefusedError:
+        return False, "BakkesMod RCON refused — is Rocket League running with BakkesMod?"
     except Exception as e:
         return False, "BakkesMod RCON error: " + str(e)
 
@@ -130,23 +136,18 @@ def bakkesmod_rcon(cmd_str):
 def full_export_pipeline(arena_json):
     settings = load_settings()
 
-    # Write arena JSON for commandlet
     ARENA_BUILD_JSON.write_text(json.dumps(arena_json, indent=2), encoding="utf-8")
 
-    # Step 1: UDK commandlet
     ok, err = run_udk_commandlet(settings)
     if not ok:
         return {"ok": False, "error": err, "step": "udk"}
 
-    # Step 2: Copy to RL
     ok, err = copy_to_rl(settings)
     if not ok:
         return {"ok": False, "error": err, "step": "copy"}
 
-    # Step 3: BakkesMod RCON — reload map
-    rcon_ok, rcon_err = bakkesmod_rcon("load_freeplay")
+    rcon_ok, rcon_err = bakkesmod_rcon("load_map Labs_Underpass_P")
     if not rcon_ok:
-        # Non-fatal — map was copied, just needs manual reload
         return {
             "ok": True,
             "warning": "Map copied but BakkesMod RCON failed: " + rcon_err +
@@ -181,9 +182,8 @@ def get_status():
 #  Workshop publish
 # ─────────────────────────────────────────────────────────────────────────────
 
-def publish_to_workshop(arena_json):
-    from patcher import publish_workshop  # local import to keep server.py self-contained
-    settings = load_settings()
+def publish_to_workshop(arena_json, settings):
+    from patcher import publish_workshop
     try:
         result = publish_workshop(arena_json, settings)
         if result.get("publishedfileid"):
@@ -220,6 +220,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def read_body_json(self):
         length = int(self.headers.get("Content-Length", 0))
+        if length > 10 * 1024 * 1024:  # 10 MB limit
+            raise ValueError("Request body too large (" + str(length) + " bytes)")
         raw = self.rfile.read(length)
         return json.loads(raw.decode("utf-8"))
 
@@ -243,19 +245,28 @@ class Handler(BaseHTTPRequestHandler):
             result = full_export_pipeline(body)
             self.send_json(result)
         elif path == "/publish":
-            result = publish_to_workshop(body)
+            settings = load_settings()
+            result = publish_to_workshop(body, settings)
             self.send_json(result)
         else:
             self.send_json({"ok": False, "error": "Unknown endpoint"}, 404)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Main
+#  Main — use ThreadingHTTPServer so UDK subprocess doesn't block the server
 # ─────────────────────────────────────────────────────────────────────────────
+
+try:
+    from http.server import ThreadingHTTPServer
+except ImportError:
+    import socketserver
+    class ThreadingHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
+        pass
+
 
 def main():
     port = 8081
-    server = HTTPServer(("127.0.0.1", port), Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     print(f"RL Map Designer export server running on http://localhost:{port}")
     print("Endpoints: GET /status  POST /export  POST /publish")
     print("Press Ctrl+C to stop.")

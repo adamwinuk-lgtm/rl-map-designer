@@ -134,6 +134,37 @@ body { background: #111; color: #ccc; font-family: 'Segoe UI', Arial, sans-serif
 #modal-cancel { background: #222; color: #aaa; }
 #modal-confirm { background: #224488; color: #fff; border-color: #4477cc; }
 
+/* ── Tutorial ── */
+#tutorial-overlay {
+  display: none; position: fixed; inset: 0; z-index: 2000; pointer-events: none;
+}
+#tutorial-overlay.active { display: block; }
+#tutorial-spotlight {
+  position: absolute; border: 2px solid #88aaff; border-radius: 6px;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.72), 0 0 22px rgba(136,170,255,0.5);
+  transition: left 0.3s ease, top 0.3s ease, width 0.3s ease, height 0.3s ease;
+  pointer-events: none;
+}
+#tutorial-card {
+  position: absolute; background: #1a1a2e; border: 1px solid #5566bb;
+  border-radius: 10px; padding: 18px 20px; width: 300px;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.7);
+  pointer-events: auto;
+  transition: left 0.3s ease, top 0.3s ease;
+}
+#tutorial-card h3 { font-size: 14px; color: #88aaff; margin-bottom: 8px; }
+#tutorial-card p { font-size: 12px; color: #bbb; line-height: 1.55; margin-bottom: 14px; white-space: pre-line; }
+#tut-dots { display: flex; gap: 6px; margin-bottom: 12px; }
+.tut-dot { width: 7px; height: 7px; border-radius: 50%; background: #2a2a44; border: 1px solid #5566bb; transition: background 0.2s; }
+.tut-dot.active { background: #88aaff; }
+#tut-btns { display: flex; gap: 8px; }
+.tut-btn { padding: 5px 13px; border-radius: 4px; cursor: pointer; font-size: 12px; border: 1px solid #444; background: #22223a; color: #ccc; }
+.tut-btn:hover { background: #2a2a50; }
+.tut-btn.primary { background: #224488; border-color: #4477cc; color: #fff; }
+.tut-btn.primary:hover { background: #2a55aa; }
+#tut-skip { color: #666; border-color: #333; }
+#tut-next { margin-left: auto; }
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #111; }
@@ -154,6 +185,8 @@ body { background: #111; color: #ccc; font-family: 'Segoe UI', Arial, sans-serif
   <button class="tb-btn" id="btn-top" title="Top view">&#x25A4; Top</button>
   <button class="tb-btn" id="btn-reset-cam" title="Reset camera">&#x1F504; Camera</button>
   <button class="tb-btn" id="btn-auto-layout" title="Place standard RL layout">&#x2605; Auto-Layout</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="btn-help-tutorial" title="Open tutorial">? Help</button>
 </div>
 
 <!-- Main -->
@@ -272,10 +305,25 @@ body { background: #111; color: #ccc; font-family: 'Segoe UI', Arial, sans-serif
   </div>
 </div>
 
-<!-- Three.js via CDN -->
-<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-<script src="https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
-<script src="https://unpkg.com/three@0.160.0/examples/js/controls/TransformControls.js"></script>
+<!-- Tutorial Overlay -->
+<div id="tutorial-overlay">
+  <div id="tutorial-spotlight"></div>
+  <div id="tutorial-card">
+    <h3 id="tut-title"></h3>
+    <p id="tut-text"></p>
+    <div id="tut-dots"></div>
+    <div id="tut-btns">
+      <button class="tut-btn" id="tut-skip">Skip tutorial</button>
+      <button class="tut-btn" id="tut-prev">&#x2190; Back</button>
+      <button class="tut-btn primary" id="tut-next">Next &#x2192;</button>
+    </div>
+  </div>
+</div>
+
+<!-- Three.js via CDN (r146 — last version with examples/js/controls/) -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.146.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.146.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.146.0/examples/js/controls/TransformControls.js"></script>
 <script>
 'use strict';
 // ────────────────────────────────────────────────────────────────────────────
@@ -648,6 +696,9 @@ function init() {
 
   // Start render loop
   animate();
+
+  // Tutorial — shows on first visit, reopenable via ? Help
+  initTutorial();
 
   showToast('RL Map Designer ready — click palette to place objects', '');
 }
@@ -1721,6 +1772,128 @@ function showToast(msg, type) {
   el.className = 'show' + (type === 'warn' ? ' warn' : '');
   if (_toastTimer) clearTimeout(_toastTimer);
   _toastTimer = setTimeout(function() { el.classList.remove('show'); }, 3500);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Tutorial
+// ────────────────────────────────────────────────────────────────────────────
+var _tutStep = 0;
+var _tutSteps = [
+  { title: 'Welcome to RL Map Designer!',
+    text: 'Create custom Rocket League arenas in your browser and export them directly into the game. This quick tutorial walks you through the key features.',
+    target: null },
+  { title: '1 \u2014 Choose an Arena Shape',
+    text: 'Click any Arena Preset to instantly reshape the arena. Or type custom Width / Length / Height in the right panel. Toggle Walls and Ceiling on or off.',
+    target: '#sidebar-left > .sb-section:nth-child(2)', cardPos: 'right-of' },
+  { title: '2 \u2014 Place Objects',
+    text: 'Click any item in the Object Palette, then click anywhere in the 3D viewport to place it. Press Escape or right-click to cancel placement.',
+    target: '#sidebar-left > .sb-section:nth-child(1)', cardPos: 'right-of' },
+  { title: '3 \u2014 Navigate the Viewport',
+    text: 'Right-click + drag to orbit the camera.\nMiddle-click + drag to pan.\nScroll wheel to zoom.\nUse W / E / R to switch between Move, Rotate, and Scale gizmo modes.',
+    target: '#center', cardPos: 'top-right' },
+  { title: '4 \u2014 Select & Adjust Objects',
+    text: 'Click any placed object to select it and show the transform gizmo. Drag the coloured arrows to reposition it. The Properties Panel here shows exact coordinates and type-specific settings.',
+    target: '#sidebar-right', cardPos: 'left-of' },
+  { title: '5 \u2014 Goal Presets',
+    text: '"Impossible Goal" makes tiny goals for pinch-shot challenges.\n"Triple Goal" adds 3 goals per end (Lethamyr-style).\n"Wall Goals" rotates goals onto the side walls for air hockey.\nAll are fully re-editable after placement.',
+    target: '#sidebar-left > .sb-section:nth-child(3)', cardPos: 'right-of' },
+  { title: '6 \u2014 Undo, Redo & Save',
+    text: 'Every action is undoable.\nCtrl+Z \u2014 undo  |  Ctrl+Y \u2014 redo\nCtrl+S \u2014 save .json  |  Ctrl+E \u2014 export to RL\nThe map auto-saves to browser storage after every change.',
+    target: '#bottom-bar', cardPos: 'top-center' },
+  { title: '7 \u2014 Export to Rocket League',
+    text: 'Click "Export to RL" to run the full pipeline: UDK builds the map, it\'s copied into RL, and BakkesMod loads it automatically.\n\nMake sure python3 scripts/server.py is running first!\n\nYou\'re all set \u2014 happy mapping! \uD83D\uDE80',
+    target: '#btn-export-rl', cardPos: 'top-of' }
+];
+
+function initTutorial() {
+  // Build step dots
+  var dotsEl = document.getElementById('tut-dots');
+  _tutSteps.forEach(function(_, i) {
+    var d = document.createElement('div');
+    d.className = 'tut-dot';
+    dotsEl.appendChild(d);
+  });
+
+  document.getElementById('tut-skip').addEventListener('click', closeTutorial);
+  document.getElementById('tut-prev').addEventListener('click', function() {
+    if (_tutStep > 0) showTutorialStep(_tutStep - 1);
+  });
+  document.getElementById('tut-next').addEventListener('click', function() {
+    if (_tutStep < _tutSteps.length - 1) showTutorialStep(_tutStep + 1);
+    else closeTutorial();
+  });
+  document.getElementById('btn-help-tutorial').addEventListener('click', openTutorial);
+
+  // Auto-open on first visit
+  if (!localStorage.getItem('rl_map_tutorial_done')) {
+    setTimeout(openTutorial, 900);
+  }
+}
+
+function openTutorial() {
+  document.getElementById('tutorial-overlay').classList.add('active');
+  showTutorialStep(0);
+}
+
+function closeTutorial() {
+  document.getElementById('tutorial-overlay').classList.remove('active');
+  localStorage.setItem('rl_map_tutorial_done', '1');
+}
+
+function showTutorialStep(n) {
+  _tutStep = n;
+  var step = _tutSteps[n];
+
+  // Update dots
+  document.querySelectorAll('.tut-dot').forEach(function(d, i) {
+    d.classList.toggle('active', i === n);
+  });
+
+  // Update text
+  document.getElementById('tut-title').textContent = step.title;
+  document.getElementById('tut-text').textContent = step.text;
+  document.getElementById('tut-prev').style.visibility = (n === 0) ? 'hidden' : 'visible';
+  document.getElementById('tut-next').textContent = (n === _tutSteps.length - 1) ? 'Finish \u2713' : 'Next \u2192';
+
+  var spotlight = document.getElementById('tutorial-spotlight');
+  var card = document.getElementById('tutorial-card');
+
+  if (!step.target) {
+    spotlight.style.display = 'none';
+    card.style.cssText = 'left:50%; top:50%; transform:translate(-50%,-50%);';
+    return;
+  }
+
+  var el = document.querySelector(step.target);
+  if (!el) {
+    spotlight.style.display = 'none';
+    card.style.cssText = 'left:50%; top:50%; transform:translate(-50%,-50%);';
+    return;
+  }
+
+  spotlight.style.display = '';
+  card.style.transform = '';
+
+  var r = el.getBoundingClientRect();
+  var pad = 7;
+  spotlight.style.left   = (r.left - pad) + 'px';
+  spotlight.style.top    = (r.top  - pad) + 'px';
+  spotlight.style.width  = (r.width  + pad * 2) + 'px';
+  spotlight.style.height = (r.height + pad * 2) + 'px';
+
+  var cardW = 300, cardH = 230;
+  var vw = window.innerWidth, vh = window.innerHeight;
+  var cx, cy;
+  var pos = step.cardPos || 'right-of';
+  if      (pos === 'right-of')   { cx = r.right + 18;                      cy = r.top + r.height / 2 - cardH / 2; }
+  else if (pos === 'left-of')    { cx = r.left - cardW - 18;               cy = r.top + r.height / 2 - cardH / 2; }
+  else if (pos === 'top-right')  { cx = r.right - cardW;                   cy = r.top - cardH - 16; }
+  else if (pos === 'top-center') { cx = r.left + r.width / 2 - cardW / 2; cy = r.top - cardH - 16; }
+  else if (pos === 'top-of')     { cx = r.left + r.width / 2 - cardW / 2; cy = r.top - cardH - 16; }
+  else                           { cx = vw / 2 - cardW / 2;               cy = vh / 2 - cardH / 2; }
+
+  card.style.left = Math.max(8, Math.min(vw - cardW - 8, cx)) + 'px';
+  card.style.top  = Math.max(8, Math.min(vh - cardH - 8, cy)) + 'px';
 }
 
 // ────────────────────────────────────────────────────────────────────────────

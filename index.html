@@ -327,16 +327,19 @@ body { background: #111; color: #ccc; font-family: 'Segoe UI', Arial, sans-serif
 <script>
 'use strict';
 // ── Startup error trap — makes any init() crash visible in the UI ──────────
-window.onerror = function(msg, src, line, col, err) {
-  var banner = document.getElementById('_err');
-  if (!banner) {
-    banner = document.createElement('div');
-    banner.id = '_err';
-    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#a00;color:#fff;padding:8px 12px;z-index:9999;font:13px monospace;white-space:pre-wrap;';
-    document.body.prepend(banner);
+var _ERROR_BANNER_CSS = 'position:fixed;top:0;left:0;right:0;background:#a00;color:#fff;padding:8px 12px;z-index:9999;font:13px monospace;white-space:pre-wrap;';
+function _showErrorBanner(text) {
+  var el = document.getElementById('_err');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = '_err';
+    el.style.cssText = _ERROR_BANNER_CSS;
+    document.body.prepend(el);
   }
-  banner.textContent = (banner.textContent ? banner.textContent + '\n' : '') +
-    'JS ERROR line ' + line + ': ' + msg + (err && err.stack ? '\n' + err.stack.slice(0,400) : '');
+  el.textContent = (el.textContent ? el.textContent + '\n' : '') + text;
+}
+window.onerror = function(msg, src, line, col, err) {
+  _showErrorBanner('JS ERROR line ' + line + ': ' + msg + (err && err.stack ? '\n' + err.stack.slice(0, 400) : ''));
   return false;
 };
 // ────────────────────────────────────────────────────────────────────────────
@@ -515,13 +518,15 @@ function CompoundCmd(cmds) {
 //  Init
 // ────────────────────────────────────────────────────────────────────────────
 function init() {
-  // Guard: if THREE failed to load, show clear error and abort
-  if (typeof THREE === 'undefined') {
+  // Guard: if Three.js or its controls failed to load, show clear error and abort
+  if (typeof THREE === 'undefined' || typeof THREE.OrbitControls === 'undefined') {
     document.body.innerHTML = '<div style="padding:40px;color:#f88;font-family:monospace;font-size:15px">' +
-      '<b>Error: Three.js failed to load.</b><br>Make sure lib/three.min.js exists and the server is running.<br>' +
-      'Run: <code>python3 -m http.server 8082</code> from the project root.</div>';
+      '<b>Error: Three.js failed to load.</b><br>Make sure lib/ files exist and the server is running.<br>' +
+      'Run: <code>python3 -m http.server</code> from the project root.</div>';
     return;
   }
+  _mouse = new THREE.Vector2();
+  _raycaster = new THREE.Raycaster();
   try {
   var canvas = document.getElementById('viewport');
   renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
@@ -723,14 +728,7 @@ function init() {
 
   showToast('RL Map Designer ready — click palette to place objects', '');
   } catch (e) {
-    var errEl = document.getElementById('_err');
-    if (!errEl) {
-      errEl = document.createElement('div');
-      errEl.id = '_err';
-      errEl.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#a00;color:#fff;padding:8px 12px;z-index:9999;font:13px monospace;white-space:pre-wrap;';
-      document.body.prepend(errEl);
-    }
-    errEl.textContent = 'init() CRASHED: ' + e.message + '\n' + (e.stack || '').slice(0, 600);
+    _showErrorBanner('init() CRASHED: ' + e.message + '\n' + (e.stack || '').slice(0, 600));
   }
 }
 
@@ -739,9 +737,9 @@ function init() {
 // ────────────────────────────────────────────────────────────────────────────
 function animate() {
   requestAnimationFrame(animate);
-  orbitControls.update();
+  if (orbitControls) orbitControls.update();
   if (_boxHelper && _selected) _boxHelper.update();
-  renderer.render(scene, camera);
+  if (renderer && scene && camera) renderer.render(scene, camera);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1131,8 +1129,8 @@ function cancelPlacement() {
 // ────────────────────────────────────────────────────────────────────────────
 //  Mouse / raycasting
 // ────────────────────────────────────────────────────────────────────────────
-var _mouse = new THREE.Vector2();
-var _raycaster = new THREE.Raycaster();
+var _mouse = null;      // initialized in init() after THREE guard
+var _raycaster = null;  // initialized in init() after THREE guard
 
 function getMouseNDC(e) {
   var rect = renderer.domElement.getBoundingClientRect();

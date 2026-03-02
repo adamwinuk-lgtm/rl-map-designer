@@ -418,7 +418,7 @@ var _transformStartScale = null;
 // ────────────────────────────────────────────────────────────────────────────
 //  Undo/Redo
 // ────────────────────────────────────────────────────────────────────────────
-var history = {
+var _history = {
   undoStack: [],
   redoStack: [],
   execute: function(cmd) {
@@ -600,8 +600,8 @@ function init() {
           var cmd = new MoveObjectCmd(_selected,
             _transformStartPos, _transformStartRot, _transformStartScale,
             ap, ar, as_);
-          history.undoStack.push(cmd);
-          history.redoStack.length = 0;
+          _history.undoStack.push(cmd);
+          _history.redoStack.length = 0;
           syncMeshToData(_selected);
           autoSave();
           updateStatus();
@@ -1167,7 +1167,7 @@ function onViewportClick(e) {
     if (hits.length) {
       var p = hits[0].point;
       var pos = [snapValue(p.x), 0, snapValue(p.z)];
-      history.execute(new AddObjectCmd(_placementType, pos));
+      _history.execute(new AddObjectCmd(_placementType, pos));
     }
     return;
   }
@@ -1293,12 +1293,12 @@ function updatePropsPanel(mesh) {
     var sizeEl = document.getElementById('pp-size');
     if (sizeEl) sizeEl.addEventListener('change', function() {
       var old = d.properties.size;
-      history.execute(new SetPropertyCmd(mesh, 'size', old, this.value));
+      _history.execute(new SetPropertyCmd(mesh, 'size', old, this.value));
     });
     var respEl = document.getElementById('pp-respawn');
     if (respEl) respEl.addEventListener('change', function() {
       var old = d.properties.respawnTime;
-      history.execute(new SetPropertyCmd(mesh, 'respawnTime', old, parseFloat(this.value)));
+      _history.execute(new SetPropertyCmd(mesh, 'respawnTime', old, parseFloat(this.value)));
     });
   } else if (d.type === 'goal' || type === 'goal_blue' || type === 'goal_orange') {
     bindGoalInput(mesh, 'pp-gw', 'width', p.width||21);
@@ -1307,13 +1307,13 @@ function updatePropsPanel(mesh) {
     var teamEl = document.getElementById('pp-team');
     if (teamEl) teamEl.addEventListener('change', function() {
       var old = d.properties.team;
-      history.execute(new SetPropertyCmd(mesh, 'team', old, parseInt(this.value)));
+      _history.execute(new SetPropertyCmd(mesh, 'team', old, parseInt(this.value)));
     });
   }
 
   var delBtn = document.getElementById('pp-delete');
   if (delBtn) delBtn.addEventListener('click', function() {
-    history.execute(new RemoveObjectCmd(mesh));
+    _history.execute(new RemoveObjectCmd(mesh));
     deselectAll();
   });
 }
@@ -1324,7 +1324,7 @@ function bindGoalInput(mesh, elId, prop, defVal) {
   el.addEventListener('change', function() {
     var old = mesh.userData.objectData.properties[prop] || defVal;
     var newVal = parseFloat(this.value) || defVal;
-    history.execute(new SetPropertyCmd(mesh, prop, old, newVal));
+    _history.execute(new SetPropertyCmd(mesh, prop, old, newVal));
   });
 }
 
@@ -1423,7 +1423,7 @@ function applyGoalPreset(name) {
     cmds.push(mkGoalCmd(1,  a.fw*0.2, wh, 0, Math.PI/2, 0, 0, 20, 8, 5));
   }
 
-  history.execute(new CompoundCmd(cmds));
+  _history.execute(new CompoundCmd(cmds));
   showToast('Goal preset: ' + name.replace(/_/g,' '), '');
 }
 
@@ -1514,7 +1514,7 @@ function autoLayout() {
     undo: function() { removeObjectById(bsId); }
   });
 
-  history.execute(new CompoundCmd(cmds));
+  _history.execute(new CompoundCmd(cmds));
 
   // Add standard goals after layout
   applyGoalPreset('standard');
@@ -1553,11 +1553,11 @@ function onKeyDown(e) {
 
   if (e.ctrlKey || e.metaKey) {
     if (e.key === 'z' || e.key === 'Z') {
-      if (e.shiftKey) history.redo();
-      else history.undo();
+      if (e.shiftKey) _history.redo();
+      else _history.undo();
       e.preventDefault(); return;
     }
-    if (e.key === 'y' || e.key === 'Y') { history.redo(); e.preventDefault(); return; }
+    if (e.key === 'y' || e.key === 'Y') { _history.redo(); e.preventDefault(); return; }
     if (e.key === 's' || e.key === 'S') { saveMap(); e.preventDefault(); return; }
     if (e.key === 'e' || e.key === 'E') { exportToRL(); e.preventDefault(); return; }
     if (e.key === 'l' || e.key === 'L') { restoreAutosave(); e.preventDefault(); return; }
@@ -1575,7 +1575,7 @@ function onKeyDown(e) {
       break;
     case 'Delete': case 'Backspace':
       if (_selected) {
-        history.execute(new RemoveObjectCmd(_selected));
+        _history.execute(new RemoveObjectCmd(_selected));
         deselectAll();
       }
       break;
@@ -1611,8 +1611,8 @@ function loadMap(jsonStr) {
     arenaConfig = parsed;
     buildArena();
     rebuildObjects();
-    history.undoStack = [];
-    history.redoStack = [];
+    _history.undoStack = [];
+    _history.redoStack = [];
     updateStatus();
     showToast('Map loaded: ' + arenaConfig.objects.length + ' objects', '');
   } catch(err) {
@@ -1791,7 +1791,7 @@ function confirmPublish() {
 //  Status / Toast
 // ────────────────────────────────────────────────────────────────────────────
 function updateStatus() {
-  var txt = _objects.length + ' objects | Undo: ' + history.undoStack.length + ' | Redo: ' + history.redoStack.length;
+  var txt = _objects.length + ' objects | Undo: ' + _history.undoStack.length + ' | Redo: ' + _history.redoStack.length;
   document.getElementById('status-text').textContent = txt;
 }
 
